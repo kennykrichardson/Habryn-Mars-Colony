@@ -1,0 +1,74 @@
+# Byte-compiled
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment variables
+.env
+.env.*
+
+# Simulation saves
+saves/
+*.save
+*.sav
+*.pickle
+
+# Runtime caches
+cache/
+temp/
+tmp/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated reports
+reports/
+exports/
+
+# Python packaging
+pip-wheel-metadata/
+
+# macOS/Linux
+*.swp
+*.swo
+
+# Windows
+desktop.ini

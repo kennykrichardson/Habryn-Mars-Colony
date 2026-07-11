@@ -1,0 +1,37 @@
+[project]
+name = "Habryn"
+version = "0.1.0"
+description = "A realistic Mars Space Colony simulation built with Mesa."
+readme = "README.md"
+requires-python = ">=3.12"
+
+authors = [
+    { name = "Kenny Richardson" }
+]
+
+dependencies = [
+    "mesa>=3.2.0",
+    "solara>=1.44.0",
+    "numpy>=2.0.0",
+    "pandas>=2.2.0",
+    "matplotlib>=3.9.0",
+    "networkx>=3.3",
+    "rich>=13.9.0",
+    "loguru>=0.7.2"
+]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+
+[tool.pyright]
+typeCheckingMode = "standard"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
