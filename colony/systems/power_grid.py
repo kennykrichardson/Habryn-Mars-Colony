@@ -17,7 +17,6 @@ from colony.resources.power import Power
 
 from colony.systems.base_manager import BaseManager
 
-
 # ============================================================
 # Power Grid
 # ============================================================
@@ -59,6 +58,8 @@ class PowerGrid(BaseManager):
     total_consumption: float = 0.0
 
     total_storage: float = 0.0
+
+    stored_power_dispatch: float = 0.0
 
     unmet_demand: float = 0.0
 
@@ -162,23 +163,11 @@ class PowerGrid(BaseManager):
 
                 continue
 
-            power = getattr(
-
-                producer,
-
-                "power",
-
-                None,
-
-            )
-
-            if power is not None:
-
-                total += (
-
-                    power.current_amount
-
-                )
+            output = getattr(producer, "effective_output", None)
+            if output is None:
+                output = getattr(producer, "power_output", 0.0)
+            output = getattr(producer, "metadata", {}).get("last_power_generation", output)
+            total += max(0.0, float(output))
 
         self.total_generation = total
 
@@ -201,23 +190,16 @@ class PowerGrid(BaseManager):
                 continue
 
             if hasattr(
-
                 consumer,
-
                 "power_required",
-
             ):
 
-                total += (
-
-                    consumer.power_required
-
-                )
+                total += consumer.power_required
 
         self.total_consumption = total
 
         return total
-    
+
     # ========================================================
     # Distribution
     # ========================================================
@@ -226,37 +208,21 @@ class PowerGrid(BaseManager):
         self,
     ) -> None:
 
-        available = (
-
-            self.total_generation
-
-            * self.transmission_efficiency
-
-        )
+        available = (self.total_generation * self.transmission_efficiency
+                     + self.stored_power_dispatch)
 
         demand = self.total_consumption
 
-        self.power_losses = (
-
-            self.total_generation
-
-            - available
-
-        )
+        self.power_losses = self.total_generation - available
 
         if available >= demand:
 
             self.unmet_demand = 0.0
+            self.restore_power()
 
             return
 
-        self.unmet_demand = (
-
-            demand
-
-            - available
-
-        )
+        self.unmet_demand = demand - available
 
         if self.automatic_load_balancing:
 
@@ -271,28 +237,16 @@ class PowerGrid(BaseManager):
     ) -> None:
 
         consumers = sorted(
-
             self.consumers,
-
             key=lambda building: getattr(
-
                 building,
-
                 "power_priority",
-
                 100,
-
             ),
-
         )
 
-        available = (
-
-            self.total_generation
-
-            * self.transmission_efficiency
-
-        )
+        available = (self.total_generation * self.transmission_efficiency
+                     + self.stored_power_dispatch)
 
         for consumer in consumers:
 
@@ -301,47 +255,32 @@ class PowerGrid(BaseManager):
                 continue
 
             required = getattr(
-
                 consumer,
-
                 "power_required",
-
                 0.0,
-
             )
 
             if available >= required:
 
                 available -= required
 
-                setattr(
-
-                    consumer,
-
-                    "is_powered",
-
-                    True,
-
-                )
+                if hasattr(consumer, "set_power"):
+                    consumer.set_power(True)
+                else:
+                    setattr(consumer, "is_powered", True)
 
             else:
 
-                setattr(
-
-                    consumer,
-
-                    "is_powered",
-
-                    False,
-
-                )
+                if hasattr(consumer, "set_power"):
+                    consumer.set_power(False)
+                else:
+                    setattr(consumer, "is_powered", False)
 
         self.unmet_demand = max(
-
             0.0,
-
-            available,
-
+            self.total_consumption
+            - self.total_generation * self.transmission_efficiency
+            - self.stored_power_dispatch,
         )
 
     # ========================================================
@@ -356,25 +295,46 @@ class PowerGrid(BaseManager):
 
         for battery in self.batteries:
 
-            power = getattr(
-
-                battery,
-
-                "power",
-
-                None,
-
-            )
-
-            if power is not None:
-
-                total += (
-
-                    power.current_amount
-
-                )
+            total += max(0.0, float(getattr(battery, "stored_energy", 0.0)))
 
         self.total_storage = total
+
+    def hourly_update(self) -> None:
+        """Balance available generation against demand and battery capacity."""
+        super().hourly_update()
+        if not self.enabled:
+            return
+        self.calculate_generation()
+        self.calculate_consumption()
+        deficit = max(0.0, self.total_consumption - self.total_generation * self.transmission_efficiency)
+        inventory_power = min(deficit, self.power_resource.current_amount)
+        if inventory_power:
+            self.power_resource.consume(inventory_power)
+        remaining = deficit - inventory_power
+        battery_dispatch = 0.0
+        for battery in self.batteries:
+            if remaining <= 0:
+                break
+            delivered = battery.discharge(remaining)
+            battery_dispatch += delivered
+            remaining -= delivered
+        self.stored_power_dispatch = inventory_power + battery_dispatch
+        self.distribute_power()
+        surplus = max(0.0, self.total_generation * self.transmission_efficiency - self.total_consumption)
+        if surplus > 0:
+            for battery in self.batteries:
+                if surplus <= 0:
+                    break
+                transfer = min(surplus, battery.charge_rate, battery.available_capacity)
+                if transfer <= 0:
+                    continue
+                removed = self.power_resource.consume(transfer)
+                if removed:
+                    accepted = battery.charge(float(removed))
+                    surplus -= accepted
+        else:
+            self.unmet_demand = max(0.0, remaining)
+        self.update_storage()
 
     # ========================================================
     # Grid Status
@@ -385,13 +345,7 @@ class PowerGrid(BaseManager):
         self,
     ) -> float:
 
-        return (
-
-            self.total_generation
-
-            - self.total_consumption
-
-        )
+        return self.total_generation + self.stored_power_dispatch - self.total_consumption
 
     @property
     def grid_efficiency(
@@ -403,17 +357,7 @@ class PowerGrid(BaseManager):
             return 0.0
 
         return (
-
-            (
-
-                self.total_generation
-
-                - self.power_losses
-
-            )
-
-            / self.total_generation
-
+            (self.total_generation - self.power_losses) / self.total_generation
         ) * 100.0
 
     @property
@@ -421,50 +365,24 @@ class PowerGrid(BaseManager):
         self,
     ) -> bool:
 
-        return (
-
-            self.total_generation
-
-            <
-
-            self.total_consumption
-
-            * self.brownout_threshold
-
-        )
+        return (self.total_generation * self.transmission_efficiency + self.stored_power_dispatch
+                < self.total_consumption * self.brownout_threshold)
 
     @property
     def blackout(
         self,
     ) -> bool:
 
-        return (
-
-            self.total_generation
-
-            <
-
-            self.total_consumption
-
-            * self.blackout_threshold
-
-        )
+        return (self.total_generation * self.transmission_efficiency + self.stored_power_dispatch
+                < self.total_consumption * self.blackout_threshold)
 
     @property
     def operating_normally(
         self,
     ) -> bool:
 
-        return (
+        return not self.brownout and not self.blackout
 
-            not self.brownout
-
-            and
-
-            not self.blackout
-
-        )
-    
     # ========================================================
     # Priority Management
     # ========================================================
@@ -476,19 +394,12 @@ class PowerGrid(BaseManager):
     ) -> None:
 
         setattr(
-
             building,
-
             "power_priority",
-
             max(
-
                 1,
-
                 priority,
-
             ),
-
         )
 
     def power_priority(
@@ -497,13 +408,9 @@ class PowerGrid(BaseManager):
     ) -> int:
 
         return getattr(
-
             building,
-
             "power_priority",
-
             100,
-
         )
 
     def minimum_power(
@@ -512,13 +419,9 @@ class PowerGrid(BaseManager):
     ) -> float:
 
         return getattr(
-
             building,
-
             "minimum_power",
-
             0.0,
-
         )
 
     def is_powered(
@@ -527,13 +430,9 @@ class PowerGrid(BaseManager):
     ) -> bool:
 
         return getattr(
-
             building,
-
             "is_powered",
-
             True,
-
         )
 
     def powered_buildings(
@@ -541,17 +440,11 @@ class PowerGrid(BaseManager):
     ) -> list[BaseBuilding]:
 
         return [
-
             building
-
             for building in self.consumers
-
             if self.is_powered(
-
                 building,
-
             )
-
         ]
 
     def unpowered_buildings(
@@ -559,19 +452,13 @@ class PowerGrid(BaseManager):
     ) -> list[BaseBuilding]:
 
         return [
-
             building
-
             for building in self.consumers
-
             if not self.is_powered(
-
                 building,
-
             )
-
         ]
-    
+
     # ========================================================
     # Emergency Power
     # ========================================================
@@ -582,15 +469,10 @@ class PowerGrid(BaseManager):
 
         for building in self.consumers:
 
-            setattr(
-
-                building,
-
-                "is_powered",
-
-                True,
-
-            )
+            if hasattr(building, "set_power"):
+                building.set_power(True)
+            else:
+                setattr(building, "is_powered", True)
 
     def shutdown_noncritical(
         self,
@@ -600,35 +482,23 @@ class PowerGrid(BaseManager):
         for building in self.consumers:
 
             if (
-
                 self.power_priority(
-
                     building,
-
                 )
-
                 > priority_limit
-
             ):
 
-                setattr(
-
-                    building,
-
-                    "is_powered",
-
-                    False,
-
-                )
+                if hasattr(building, "set_power"):
+                    building.set_power(False)
+                else:
+                    setattr(building, "is_powered", False)
 
     def emergency_mode(
         self,
     ) -> None:
 
         self.shutdown_noncritical(
-
             priority_limit=25,
-
         )
 
     def normal_mode(
@@ -648,91 +518,58 @@ class PowerGrid(BaseManager):
         stats = super().statistics()
 
         stats.update(
-
             {
-
-                "generation":
-                round(
+                "generation": round(
                     self.total_generation,
                     2,
                 ),
-
-                "consumption":
-                round(
+                "consumption": round(
                     self.total_consumption,
                     2,
                 ),
-
-                "storage":
-                round(
+                "storage": round(
                     self.total_storage,
                     2,
                 ),
-
-                "power_balance":
-                round(
+                "power_balance": round(
                     self.power_balance,
                     2,
                 ),
-
-                "unmet_demand":
-                round(
+                "unmet_demand": round(
                     self.unmet_demand,
                     2,
                 ),
-
-                "power_losses":
-                round(
+                "power_losses": round(
                     self.power_losses,
                     2,
                 ),
-
-                "grid_efficiency":
-                round(
+                "grid_efficiency": round(
                     self.grid_efficiency,
                     2,
                 ),
-
-                "brownout":
-                self.brownout,
-
-                "blackout":
-                self.blackout,
-
-                "operating_normally":
-                self.operating_normally,
-
-                "producer_count":
-                len(
+                "brownout": self.brownout,
+                "blackout": self.blackout,
+                "operating_normally": self.operating_normally,
+                "producer_count": len(
                     self.producers,
                 ),
-
-                "consumer_count":
-                len(
+                "consumer_count": len(
                     self.consumers,
                 ),
-
-                "battery_count":
-                len(
+                "battery_count": len(
                     self.batteries,
                 ),
-
-                "powered_buildings":
-                len(
+                "powered_buildings": len(
                     self.powered_buildings(),
                 ),
-
-                "unpowered_buildings":
-                len(
+                "unpowered_buildings": len(
                     self.unpowered_buildings(),
                 ),
-
             }
-
         )
 
         return stats
-    
+
     # ========================================================
     # Utility
     # ========================================================
@@ -742,19 +579,12 @@ class PowerGrid(BaseManager):
     ) -> str:
 
         return (
-
             "PowerGrid("
-
             f"generation={self.total_generation:.2f}, "
-
             f"consumption={self.total_consumption:.2f}, "
-
             f"balance={self.power_balance:.2f}, "
-
             f"efficiency={self.grid_efficiency:.1f}%"
-
             ")"
-
         )
 
 

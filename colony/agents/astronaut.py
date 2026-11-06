@@ -259,9 +259,10 @@ class Astronaut(BaseAgent):
 
     def hourly_update(
         self,
+        needs_intensity: float = 1.0,
     ) -> None:
 
-        super().hourly_update()
+        super().hourly_update(needs_intensity)
 
         if self.outside:
 
@@ -310,6 +311,18 @@ class Astronaut(BaseAgent):
         cls,
         data: dict,
     ) -> "Astronaut":
+
+        data = dict(data)
+        if isinstance(data.get("state"), str):
+            data["state"] = AgentState(data["state"])
+        if isinstance(data.get("position"), list):
+            data["position"] = tuple(data["position"])
+        if isinstance(data.get("destination"), list):
+            data["destination"] = tuple(data["destination"])
+        if isinstance(data.get("path"), list):
+            data["path"] = [tuple(position) for position in data["path"]]
+        if isinstance(data.get("relationships"), dict):
+            data["relationships"] = {int(key): value for key, value in data["relationships"].items()}
 
         eva_status = EVAStatus(
             data.pop(

@@ -18,7 +18,6 @@ from dataclasses import field
 from typing import Callable
 from typing import Any
 
-
 # ============================================================
 # Scheduled Task
 # ============================================================
@@ -34,6 +33,7 @@ class ScheduledTask:
     enabled: bool = True
 
     name: str = ""
+
 
 # ============================================================
 # Scheduler
@@ -205,23 +205,15 @@ class Scheduler:
     ) -> None:
 
         self.tasks.append(
-
             ScheduledTask(
-
                 callback=callback,
-
                 priority=priority,
-
                 name=name or callback.__name__,
-
             )
-
         )
 
         self.tasks.sort(
-
             key=lambda task: task.priority,
-
         )
 
     def unregister(
@@ -229,15 +221,7 @@ class Scheduler:
         callback: Callable[..., Any],
     ) -> None:
 
-        self.tasks = [
-
-            task
-
-            for task in self.tasks
-
-            if task.callback != callback
-
-        ]
+        self.tasks = [task for task in self.tasks if task.callback != callback]
 
     def clear(
         self,
@@ -251,9 +235,7 @@ class Scheduler:
     ) -> None:
 
         task = self.get_task(
-
             name,
-
         )
 
         if task is not None:
@@ -266,9 +248,7 @@ class Scheduler:
     ) -> None:
 
         task = self.get_task(
-
             name,
-
         )
 
         if task is not None:
@@ -343,11 +323,8 @@ class Scheduler:
     ) -> tuple[int, int]:
 
         return (
-
             self.hour,
-
             self.tick % self.ticks_per_hour,
-
         )
 
     @property
@@ -356,13 +333,9 @@ class Scheduler:
     ) -> tuple[int, int, int]:
 
         return (
-
             self.day,
-
             self.month,
-
             self.year,
-
         )
 
     @property
@@ -371,25 +344,11 @@ class Scheduler:
     ) -> int:
 
         return (
-
-            (self.year - 1)
-
-            * self.months_per_year
-
-            * self.days_per_month
-
-            +
-
-            (self.month - 1)
-
-            * self.days_per_month
-
-            +
-
-            self.day
-
+            (self.year - 1) * self.months_per_year * self.days_per_month
+            + (self.month - 1) * self.days_per_month
+            + self.day
         )
-    
+
     # ========================================================
     # Statistics
     # ========================================================
@@ -399,58 +358,25 @@ class Scheduler:
     ) -> dict:
 
         return {
-
-            "running":
-                self.running,
-
-            "paused":
-                self.paused,
-
-            "simulation_speed":
-                self.simulation_speed,
-
-            "tick":
-                self.tick,
-
-            "hour":
-                self.hour,
-
-            "day":
-                self.day,
-
-            "month":
-                self.month,
-
-            "year":
-                self.year,
-
-            "sol":
-                self.sol,
-
-            "task_count":
-                len(
-
-                    self.tasks,
-
-                ),
-
-            "new_hour":
-                self.new_hour,
-
-            "new_day":
-                self.new_day,
-
-            "new_month":
-                self.new_month,
-
-            "new_year":
-                self.new_year,
-
-            "new_sol":
-                self.new_sol,
-
+            "running": self.running,
+            "paused": self.paused,
+            "simulation_speed": self.simulation_speed,
+            "tick": self.tick,
+            "hour": self.hour,
+            "day": self.day,
+            "month": self.month,
+            "year": self.year,
+            "sol": self.sol,
+            "task_count": len(
+                self.tasks,
+            ),
+            "new_hour": self.new_hour,
+            "new_day": self.new_day,
+            "new_month": self.new_month,
+            "new_year": self.new_year,
+            "new_sol": self.new_sol,
         }
-    
+
     # ========================================================
     # Serialization
     # ========================================================
@@ -460,53 +386,23 @@ class Scheduler:
     ) -> dict:
 
         return {
-
-            "running":
-                self.running,
-
-            "paused":
-                self.paused,
-
-            "simulation_speed":
-                self.simulation_speed,
-
-            "tick":
-                self.tick,
-
-            "hour":
-                self.hour,
-
-            "day":
-                self.day,
-
-            "month":
-                self.month,
-
-            "year":
-                self.year,
-
-            "sol":
-                self.sol,
-
+            "running": self.running,
+            "paused": self.paused,
+            "simulation_speed": self.simulation_speed,
+            "tick": self.tick,
+            "hour": self.hour,
+            "day": self.day,
+            "month": self.month,
+            "year": self.year,
+            "sol": self.sol,
             "tasks": [
-
                 {
-
-                    "name":
-                        task.name,
-
-                    "priority":
-                        task.priority,
-
-                    "enabled":
-                        task.enabled,
-
+                    "name": task.name,
+                    "priority": task.priority,
+                    "enabled": task.enabled,
                 }
-
                 for task in self.tasks
-
             ],
-
         }
 
     @classmethod
@@ -518,79 +414,52 @@ class Scheduler:
         scheduler = cls()
 
         scheduler.running = data.get(
-
             "running",
-
             True,
-
         )
 
         scheduler.paused = data.get(
-
             "paused",
-
             False,
-
         )
 
         scheduler.simulation_speed = data.get(
-
             "simulation_speed",
-
             1.0,
-
         )
 
         scheduler.tick = data.get(
-
             "tick",
-
             0,
-
         )
 
         scheduler.hour = data.get(
-
             "hour",
-
             0,
-
         )
 
         scheduler.day = data.get(
-
             "day",
-
             1,
-
         )
 
         scheduler.month = data.get(
-
             "month",
-
             1,
-
         )
 
         scheduler.year = data.get(
-
             "year",
-
             1,
-
         )
 
         scheduler.sol = data.get(
-
             "sol",
-
             1,
-
         )
 
         return scheduler
-    
+
     # ========================================================
     # Utility
     # ========================================================
@@ -600,9 +469,7 @@ class Scheduler:
     ) -> int:
 
         return len(
-
             self.tasks,
-
         )
 
     def __iter__(
@@ -610,22 +477,14 @@ class Scheduler:
     ):
 
         return iter(
-
             self.tasks,
-
         )
 
     def task_names(
         self,
     ) -> list[str]:
 
-        return [
-
-            task.name
-
-            for task in self.tasks
-
-        ]
+        return [task.name for task in self.tasks]
 
     def get_task(
         self,
@@ -646,9 +505,7 @@ class Scheduler:
     ) -> bool:
 
         task = self.get_task(
-
             name,
-
         )
 
         if task is None:
@@ -656,7 +513,7 @@ class Scheduler:
             return False
 
         return task.enabled
-    
+
     # ========================================================
     # Representation
     # ========================================================
@@ -666,27 +523,16 @@ class Scheduler:
     ) -> str:
 
         return (
-
             "Scheduler("
-
             f"tick={self.tick}, "
-
             f"time={self.hour:02d}:"
-
             f"{self.tick % self.ticks_per_hour:02d}, "
-
             f"day={self.day}, "
-
             f"month={self.month}, "
-
             f"year={self.year}, "
-
             f"tasks={len(self.tasks)}, "
-
             f"running={self.running}"
-
             ")"
-
         )
 
 

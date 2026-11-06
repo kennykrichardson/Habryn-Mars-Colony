@@ -348,21 +348,60 @@ class BaseManager:
     def statistics(
         self,
     ) -> dict[str, Any]:
+        """
+        Public telemetry exposed to Mission Control.
+
+        Override in subclasses to expose
+        colony-facing information.
+        """
 
         return {
+
             "name": self.name,
+
             "enabled": self.enabled,
+
             "initialized": self.initialized,
+
             "state": self.state.value,
-            "tick_count": self.tick_count,
-            "hour_count": self.hour_count,
-            "day_count": self.day_count,
-            "update_count": self.update_count,
-            "error_count": self.error_count,
-            "registered_objects": len(
-                self.registry,
-            ),
+
         }
+
+
+    def debug_statistics(
+        self,
+    ) -> dict[str, Any]:
+        """
+        Internal diagnostics for developers.
+        """
+
+        stats = self.statistics()
+
+        stats.update({
+
+            "tick_count": self.tick_count,
+
+            "hour_count": self.hour_count,
+
+            "day_count": self.day_count,
+
+            "update_count": self.update_count,
+
+            "error_count": self.error_count,
+
+            "registered_objects": len(
+
+                self.registry,
+
+            ),
+
+        })
+
+        if self.metadata:
+
+            stats["metadata"] = self.metadata.copy()
+
+        return stats
 
     # ========================================================
     # Utility

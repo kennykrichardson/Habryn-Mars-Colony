@@ -64,6 +64,8 @@ class WeatherSystem:
 
     radiation_modifier: float = 1.0
 
+    dust_storm_frequency: float = 1.0
+
     # ========================================================
     # Weather Generation
     # ========================================================
@@ -72,7 +74,10 @@ class WeatherSystem:
         self,
     ) -> None:
 
-        self.weather = random.choice(list(WeatherType))
+        choices = list(WeatherType)
+        weights = [self.dust_storm_frequency if item == WeatherType.DUST_STORM else 1.0
+                   for item in choices]
+        self.weather = random.choices(choices, weights=weights, k=1)[0]
 
         self.temperature = random.uniform(
             -120.0,
@@ -235,6 +240,7 @@ class WeatherSystem:
                 self.radiation_modifier,
                 2,
             ),
+            "dust_storm_frequency": self.dust_storm_frequency,
             "movement_modifier": round(
                 self.movement_modifier,
                 2,
@@ -258,6 +264,7 @@ class WeatherSystem:
             "visibility": self.visibility,
             "humidity": self.humidity,
             "radiation_modifier": self.radiation_modifier,
+            "dust_storm_frequency": self.dust_storm_frequency,
         }
 
     @classmethod
@@ -304,6 +311,7 @@ class WeatherSystem:
             "radiation_modifier",
             1.0,
         )
+        system.dust_storm_frequency = data.get("dust_storm_frequency", 1.0)
 
         return system
 

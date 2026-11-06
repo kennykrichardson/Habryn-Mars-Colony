@@ -55,6 +55,10 @@ class ConstructionProject:
 
     completed: bool = False
 
+    task_id: str | None = None
+
+    footprint: tuple[int, int] = (1, 1)
+
 
 # ============================================================
 # Construction Manager
@@ -115,13 +119,9 @@ class ConstructionManager(BaseManager):
     ) -> bool:
 
         return (
-
             self.resource_manager is not None
-
             and self.power_grid is not None
-
             and self.population_manager is not None
-
         )
 
     # ========================================================
@@ -150,7 +150,7 @@ class ConstructionManager(BaseManager):
         )
 
         return project
-    
+
     def can_begin_project(
         self,
         project: ConstructionProject,
@@ -177,9 +177,12 @@ class ConstructionManager(BaseManager):
 
         for resource_name, amount in project.required_resources.items():
 
-            if self.resource_manager.amount(
-                resource_name,
-            ) < amount:
+            if (
+                self.resource_manager.amount(
+                    resource_name,
+                )
+                < amount
+            ):
 
                 return False
 
@@ -204,7 +207,7 @@ class ConstructionManager(BaseManager):
         if project.assigned_agent is not None:
 
             return False
-        
+
         if not self.can_begin_project(
             project,
         ):
@@ -219,11 +222,8 @@ class ConstructionManager(BaseManager):
         for resource_name, amount in project.required_resources.items():
 
             self.resource_manager.consume(
-
                 resource_name,
-
                 amount,
-
             )
 
         self.population_manager.employ(
@@ -264,7 +264,7 @@ class ConstructionManager(BaseManager):
         manager = self.population_manager
 
         if manager is not None:
-                
+
             manager.dismiss(
                 1,
             )

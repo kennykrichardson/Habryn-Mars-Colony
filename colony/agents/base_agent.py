@@ -65,6 +65,12 @@ class AgentState(Enum):
 
     INJURED = "Injured"
 
+    SOCIALIZING = "Socializing"
+
+    OPERATING = "Operating Equipment"
+
+    EMERGENCY = "Emergency Response"
+
     DEAD = "Dead"
 
 
@@ -180,6 +186,30 @@ class BaseAgent:
     # --------------------------------------------------------
 
     state: AgentState = AgentState.IDLE
+
+    personality: dict[str, float] = field(default_factory=dict)
+
+    appearance: dict[str, Any] = field(default_factory=dict)
+
+    background: str = ""
+
+    employment_status: str = "Available"
+
+    work_schedule: dict[str, int] = field(default_factory=dict)
+
+    workplace_id: int | None = None
+
+    current_activity: str = "Idle"
+
+    next_activity: str = "Work"
+
+    decision_reason: str = "Awaiting assignment"
+
+    activity_until_tick: int = 0
+
+    social_need: float = 0.0
+
+    recreation_need: float = 0.0
 
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -312,6 +342,7 @@ class BaseAgent:
         if self.alive:
 
             self.state = AgentState.IDLE
+            self.current_activity = "Idle"
 
     def follow_path(
         self,
@@ -419,6 +450,7 @@ class BaseAgent:
         self.busy = True
 
         self.state = AgentState.WORKING
+        self.current_activity = "Working"
 
     def queue_task(
         self,
@@ -456,6 +488,7 @@ class BaseAgent:
         else:
 
             self.state = AgentState.IDLE
+            self.current_activity = "Idle"
 
     def cancel_task(
         self,
@@ -493,6 +526,7 @@ class BaseAgent:
         else:
 
             self.state = AgentState.INJURED
+        self.current_activity = "Injured"
 
     def heal(
         self,
@@ -550,6 +584,7 @@ class BaseAgent:
         )
 
         self.state = AgentState.EATING
+        self.current_activity = "Eating"
 
     def drink(
         self,
@@ -562,6 +597,7 @@ class BaseAgent:
         )
 
         self.state = AgentState.DRINKING
+        self.current_activity = "Drinking"
 
     def sleep(
         self,
@@ -579,6 +615,7 @@ class BaseAgent:
         )
 
         self.state = AgentState.SLEEPING
+        self.current_activity = "Sleeping"
 
     def rest(
         self,
@@ -591,6 +628,7 @@ class BaseAgent:
         )
 
         self.state = AgentState.IDLE
+        self.current_activity = "Resting"
 
     def change_morale(
         self,
@@ -638,6 +676,7 @@ class BaseAgent:
 
     def hourly_update(
         self,
+        needs_intensity: float = 1.0,
     ) -> None:
         """
         Called once every simulation hour.
@@ -651,22 +690,25 @@ class BaseAgent:
         if self.busy:
             self.hours_worked += 1
 
-        self.consume_oxygen(0.5)
+        needs_intensity = max(0.0, needs_intensity)
+        self.consume_oxygen(0.5 * needs_intensity)
 
         self.hunger = min(
             100.0,
-            self.hunger + 1.0,
+            self.hunger + 1.0 * needs_intensity,
         )
 
         self.thirst = min(
             100.0,
-            self.thirst + 1.5,
+            self.thirst + 1.5 * needs_intensity,
         )
 
         self.fatigue = min(
             100.0,
-            self.fatigue + 0.75,
+            self.fatigue + 0.75 * needs_intensity,
         )
+        self.social_need = min(100.0, self.social_need + 2.0 * needs_intensity)
+        self.recreation_need = min(100.0, self.recreation_need + 1.0 * needs_intensity)
 
         if self.stress > 80:
 
@@ -684,6 +726,9 @@ class BaseAgent:
 
             self.change_stress(1.0)
 
+        if self.social_need >= 85:
+            self.change_stress(.5)
+
     def daily_update(
         self,
     ) -> None:
@@ -699,6 +744,11 @@ class BaseAgent:
         if self.morale < 25:
 
             self.change_stress(5)
+
+        if self.social_need < 35 and self.recreation_need < 40:
+            self.change_morale(.25)
+        elif self.social_need >= 85 or self.recreation_need >= 90:
+            self.change_morale(-.5)
 
         if self.health < self.max_health:
 
@@ -885,6 +935,18 @@ class BaseAgent:
             "tasks_completed": self.tasks_completed,
             "hours_worked": self.hours_worked,
             "hours_alive": self.hours_alive,
+            "personality": dict(self.personality),
+            "appearance": dict(self.appearance),
+            "background": self.background,
+            "employment_status": self.employment_status,
+            "work_schedule": dict(self.work_schedule),
+            "workplace_id": self.workplace_id,
+            "current_activity": self.current_activity,
+            "next_activity": self.next_activity,
+            "decision_reason": self.decision_reason,
+            "activity_until_tick": self.activity_until_tick,
+            "social_need": round(self.social_need, 2),
+            "recreation_need": round(self.recreation_need, 2),
         }
 
     # ========================================================

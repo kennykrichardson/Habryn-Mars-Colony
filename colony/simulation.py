@@ -29,9 +29,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from dataclasses import field
+from dataclasses import asdict
+import random
+from collections import deque
+from dataclasses import replace
+from enum import Enum
+import json
+from pathlib import Path
 
 from colony.model import ColonyModel
 from colony.scheduler import Scheduler
+from colony.environment.mars_map import MarsMap
+from colony.initialization import ColonyConfig, initialize_colony
 
 # ============================================================
 # Simulation
@@ -40,6 +49,8 @@ from colony.scheduler import Scheduler
 
 @dataclass
 class Simulation:
+
+    config: ColonyConfig = field(default_factory=ColonyConfig)
 
     model: ColonyModel = field(
 
@@ -67,11 +78,15 @@ class Simulation:
         self,
     ) -> None:
 
-        self.model = ColonyModel(
-
-            scheduler=self.scheduler,
-
-        )
+        self.simulation_speed = self.config.simulation_speed
+        self.scheduler.simulation_speed = self.simulation_speed
+        if self.config.seed is not None:
+            random.seed(self.config.seed)
+        self.model = ColonyModel(scheduler=self.scheduler,
+                                 mars_map=MarsMap(self.config.width, self.config.height),
+                                 world_seed=self.config.seed or 0)
+        self.model.social_manager.set_seed(self.config.seed)
+        initialize_colony(self.model, self.config)
 
         self.running = False
 
@@ -90,6 +105,7 @@ class Simulation:
         self.paused = False
 
         self.scheduler.start()
+        self.scheduler.resume()
 
     def stop(
         self,
@@ -135,6 +151,17 @@ class Simulation:
 
         self.model.step()
 
+    def step_once(self) -> None:
+        """Advance exactly one tick even while paused."""
+        was_running, was_paused = self.scheduler.running, self.scheduler.paused
+        self.scheduler.running, self.scheduler.paused = True, False
+        self.scheduler.step()
+        self.model.step()
+        self.scheduler.running, self.scheduler.paused = was_running, was_paused
+
+    def world_snapshot(self):
+        return self.model.world_snapshot()
+
     # ========================================================
     # Simulation Loop
     # ========================================================
@@ -160,8 +187,15 @@ class Simulation:
         self.stop()
 
         self.scheduler.reset()
-
-        self.model.reset()
+        self.simulation_speed = self.config.simulation_speed
+        self.scheduler.simulation_speed = self.simulation_speed
+        if self.config.seed is not None:
+            random.seed(self.config.seed)
+        self.model = ColonyModel(scheduler=self.scheduler,
+                                 mars_map=MarsMap(self.config.width, self.config.height),
+                                 world_seed=self.config.seed or 0)
+        self.model.social_manager.set_seed(self.config.seed)
+        initialize_colony(self.model, self.config)
 
     # ========================================================
     # Save / Load
@@ -171,24 +205,26 @@ class Simulation:
         self,
     ) -> dict:
 
-        return {
+        return _json_safe({
+            "schema_version": 2,
+            "running": self.running,
+            "paused": self.paused,
+            "simulation_speed": self.simulation_speed,
+            "config": asdict(self.config),
+            "random_state": random.getstate(),
+            "scheduler": self.scheduler.serialize(),
+            "model": self.model.serialize(),
+        })
 
-            "running":
-                self.running,
+    def save(self, path: str | Path) -> None:
+        """Write a JSON save containing only authoritative simulation state."""
+        destination = Path(path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps(self.serialize(), indent=2), encoding="utf-8")
 
-            "paused":
-                self.paused,
-
-            "simulation_speed":
-                self.simulation_speed,
-
-            "scheduler":
-                self.scheduler.serialize(),
-
-            "model":
-                self.model.serialize(),
-
-        }
+    @classmethod
+    def load(cls, path: str | Path) -> "Simulation":
+        return cls.deserialize(json.loads(Path(path).read_text(encoding="utf-8")))
 
     @classmethod
     def deserialize(
@@ -196,7 +232,15 @@ class Simulation:
         data: dict,
     ) -> "Simulation":
 
-        simulation = cls()
+        version = int(data.get("schema_version", 1))
+        if version > 2:
+            raise ValueError(f"Save schema {version} is newer than this Habryn build supports")
+        if version < 1:
+            raise ValueError(f"Unsupported save schema: {version}")
+
+        saved_config = ColonyConfig(**data.get("config", {}))
+        simulation = cls(config=replace(saved_config, populate=False))
+        simulation.config = saved_config
 
         simulation.running = data.get(
 
@@ -233,9 +277,17 @@ class Simulation:
             )
 
         )
+        simulation.model.scheduler = simulation.scheduler
+        simulation.model.connect_managers()
+        if "model" in data:
+            simulation.model.restore_serialized(data["model"])
+        if data.get("random_state") is not None:
+            random.setstate(_as_tuple(data["random_state"]))
+        simulation.scheduler.running = simulation.running
+        simulation.scheduler.paused = simulation.paused
 
         return simulation
-    
+
     # ========================================================
     # Queries
     # ========================================================
@@ -281,7 +333,7 @@ class Simulation:
     ) -> int:
 
         return self.scheduler.year
-    
+
     # ========================================================
     # Statistics
     # ========================================================
@@ -292,26 +344,56 @@ class Simulation:
 
         return {
 
-            "running":
-                self.running,
+            "simulation": {
 
-            "paused":
-                self.paused,
+                "running":
+                    self.running,
 
-            "simulation_speed":
-                self.simulation_speed,
+                "paused":
+                    self.paused,
 
-            "initialized":
-                self.initialized,
+                "speed":
+                    self.simulation_speed,
 
-            "scheduler":
-                self.scheduler.statistics(),
+            },
 
-            "model":
-                self.model.statistics(),
+            "time": self.scheduler.statistics(),
+            "colony": self.model.statistics(),
+            "scheduler": self.scheduler.statistics(),
+            "model": self.model.statistics(),
 
         }
-    
+
+
+    def debug_statistics(
+        self,
+    ) -> dict:
+
+       return {
+
+            "simulation": {
+
+                "running":
+                    self.running,
+
+                "paused":
+                    self.paused,
+
+                "speed":
+                    self.simulation_speed,
+
+            },
+
+            "time":
+
+                self.scheduler.statistics(),
+
+            "colony":
+
+                self.model.debug_statistics(),
+
+       }
+
     # ========================================================
     # Speed
     # ========================================================
@@ -329,11 +411,7 @@ class Simulation:
 
         )
 
-        self.scheduler.simulation_speed = (
-
-            self.simulation_speed
-
-        )
+        self.scheduler.simulation_speed = self.simulation_speed
 
     def increase_speed(
         self,
@@ -365,15 +443,7 @@ class Simulation:
         self,
     ) -> bool:
 
-        return (
-
-            self.running
-
-            and
-
-            not self.paused
-
-        )
+        return self.running and not self.paused
 
     def is_paused(
         self,
@@ -402,15 +472,7 @@ class Simulation:
     ) -> str:
 
         return (
-
-            f"Simulation("
-
-            f"Day {self.current_day}, "
-
-            f"{self.current_hour:02}:00"
-
-            f")"
-
+            f"Simulation(" f"Day {self.current_day}, " f"{self.current_hour:02}:00" f")"
         )
 
     def __repr__(
@@ -432,7 +494,7 @@ class Simulation:
             ")"
 
         )
-    
+
     # ========================================================
     # Context Manager
     # ========================================================
@@ -454,8 +516,29 @@ class Simulation:
 
         self.stop()
 
+
 # ============================================================
 # Canonical Alias
 # ============================================================
 
 SimulationEngine = Simulation
+
+
+def _as_tuple(value):
+    """Convert JSON-decoded nested lists back to random.Random state tuples."""
+    return tuple(_as_tuple(item) if isinstance(item, list) else item for item in value)
+
+
+def _json_safe(value):
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, dict):
+        return {str(key.value if isinstance(key, Enum) else key): _json_safe(item)
+                for key, item in value.items()}
+    if isinstance(value, (tuple, list, deque)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, (set, frozenset)):
+        return sorted(_json_safe(item) for item in value)
+    if isinstance(value, Path):
+        return str(value)
+    return value

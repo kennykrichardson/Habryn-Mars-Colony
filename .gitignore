@@ -72,3 +72,6 @@ pip-wheel-metadata/
 
 # Windows
 desktop.ini
+
+# ZIP Files
+*.zip

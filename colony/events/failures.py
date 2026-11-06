@@ -31,6 +31,7 @@ from colony.events.event_manager import EventManager
 from colony.systems.base_manager import BaseManager
 from colony.systems.emergency_manager import (
     EmergencyManager,
+    EmergencySeverity,
 )
 
 # ============================================================
@@ -78,15 +79,10 @@ class FailureSeverity(Enum):
 
 
 FAILURE_DAMAGE = {
-
     FailureSeverity.MINOR: 5.0,
-
     FailureSeverity.MODERATE: 20.0,
-
     FailureSeverity.MAJOR: 45.0,
-
     FailureSeverity.CRITICAL: 80.0,
-
 }
 
 # ============================================================
@@ -112,6 +108,7 @@ class Failure(
     shutdown_required: bool = False
 
     catastrophic: bool = False
+
 
 # ============================================================
 # Failure Manager
@@ -143,7 +140,7 @@ class FailureManager(
 
     repaired_failures: int = 0
 
-        # ========================================================
+    # ========================================================
     # Manager Connections
     # ========================================================
 
@@ -166,17 +163,10 @@ class FailureManager(
         self,
     ) -> bool:
 
-        return (
+        return self.event_manager is not None and self.emergency_manager is not None
 
-            self.event_manager is not None
-
-            and
-
-            self.emergency_manager is not None
-
-        )
-    
         # ========================================================
+
     # Registration
     # ========================================================
 
@@ -188,9 +178,7 @@ class FailureManager(
         if building not in self.buildings:
 
             self.buildings.append(
-
                 building,
-
             )
 
     def unregister_building(
@@ -201,9 +189,7 @@ class FailureManager(
         if building in self.buildings:
 
             self.buildings.remove(
-
                 building,
-
             )
 
     # ========================================================
@@ -216,91 +202,59 @@ class FailureManager(
     ) -> Failure:
 
         failure_type = choice(
-
             list(FailureType),
-
         )
 
         severity = choice(
-
             list(FailureSeverity),
-
         )
 
         damage = FAILURE_DAMAGE.get(
-
             severity,
-
             5.0,
-
         )
+        shutdown_required = severity in (FailureSeverity.MAJOR, FailureSeverity.CRITICAL)
 
         failure = Failure(
-
             name=failure_type.value,
-
-            description=(
-                f"{failure_type.value} "
-                f"at {building.name}"
-            ),
-
+            description=(f"{failure_type.value} " f"at {building.name}"),
             severity=severity.value,
-
             failure_type=failure_type,
-
             building=building,
-
             damage=damage,
-
             repair_time=max(
                 1,
-
                 int(damage),
-
             ),
-
             power_loss=damage * 0.5,
-
-            shutdown_required=(
-
-                severity
-
-                in (
-
-                    FailureSeverity.MAJOR,
-
-                    FailureSeverity.CRITICAL,
-
-                )
-
-            ),
-
-            catastrophic=(
-
-                severity
-
-                == FailureSeverity.CRITICAL
-
-            ),
-
+            shutdown_required=shutdown_required,
+            catastrophic=(severity == FailureSeverity.CRITICAL),
         )
+        failure.event_id = f"failure-{self.total_failures + 1:06d}"
 
         failure.activate(
-
             tick=self.tick_count,
-
         )
 
         self.failures.append(
-
             failure,
-
         )
 
         self.total_failures += 1
 
+        building.damage(damage)
+        if shutdown_required:
+            building.emergency_shutdown = True
+            building.set_power(False)
+        if self.emergency_manager is not None and shutdown_required:
+            self.emergency_manager.report_emergency(
+                title=f"{failure_type.value} at {building.name}",
+                description="Infrastructure failure requires an engineer response.",
+                severity=EmergencySeverity[severity.value.name], source=building, target=building,
+                location=tuple(building.position))
+
         return failure
-    
+
     # ========================================================
     # Runtime
     # ========================================================
@@ -320,17 +274,13 @@ class FailureManager(
                 continue
 
             failure = self.create_failure(
-
                 building,
-
             )
 
             if self.event_manager is not None:
 
                 self.event_manager.publish(
-
                     failure,
-
                 )
 
     def step(
@@ -354,17 +304,7 @@ class FailureManager(
         super().daily_update()
 
         self.repaired_failures = len(
-
-            [
-
-                failure
-
-                for failure in self.failures
-
-                if failure.is_finished
-
-            ]
-
+            [failure for failure in self.failures if failure.is_finished]
         )
 
     # ========================================================
@@ -376,15 +316,7 @@ class FailureManager(
         self,
     ) -> list[Failure]:
 
-        return [
-
-            failure
-
-            for failure in self.failures
-
-            if failure.is_active
-
-        ]
+        return [failure for failure in self.failures if failure.is_active]
 
     @property
     def failure_count(
@@ -392,9 +324,7 @@ class FailureManager(
     ) -> int:
 
         return len(
-
             self.failures,
-
         )
 
     @property
@@ -403,11 +333,9 @@ class FailureManager(
     ) -> int:
 
         return len(
-
             self.buildings,
-
         )
-    
+
     # ========================================================
     # Statistics
     # ========================================================
@@ -419,30 +347,15 @@ class FailureManager(
         data = super().statistics()
 
         data.update(
-
             {
-
-                "buildings":
-                    self.building_count,
-
-                "failures":
-                    self.failure_count,
-
-                "active_failures":
-                    len(
-
-                        self.active_failures,
-
-                    ),
-
-                "repaired_failures":
-                    self.repaired_failures,
-
-                "failure_rate":
-                    self.failure_rate,
-
+                "buildings": self.building_count,
+                "failures": self.failure_count,
+                "active_failures": len(
+                    self.active_failures,
+                ),
+                "repaired_failures": self.repaired_failures,
+                "failure_rate": self.failure_rate,
             }
-
         )
 
         return data
@@ -458,24 +371,15 @@ class FailureManager(
         data = super().serialize()
 
         data.update(
-
             {
-
-                "failure_rate":
-                    self.failure_rate,
-
-                "total_failures":
-                    self.total_failures,
-
-                "repaired_failures":
-                    self.repaired_failures,
-
+                "failure_rate": self.failure_rate,
+                "total_failures": self.total_failures,
+                "repaired_failures": self.repaired_failures,
             }
-
         )
 
         return data
-    
+
     @classmethod
     def deserialize(
         cls,
@@ -545,17 +449,11 @@ class FailureManager(
     ) -> str:
 
         return (
-
             "FailureManager("
-
             f"active={len(self.active_failures)}, "
-
             f"total={self.failure_count}, "
-
             f"buildings={self.building_count}"
-
             ")"
-
         )
 
 

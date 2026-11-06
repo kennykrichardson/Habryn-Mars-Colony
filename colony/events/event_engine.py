@@ -48,6 +48,7 @@ class EngineEvent(
         default_factory=dict,
     )
 
+
 # ============================================================
 # Event Engine
 # ============================================================
@@ -64,9 +65,9 @@ class EventEngine(
 
     published_events: int = 0
 
-# ============================================================
-# Connections
-# ============================================================
+    # ============================================================
+    # Connections
+    # ============================================================
 
     def connect_event_manager(
         self,
@@ -81,10 +82,10 @@ class EventEngine(
     ) -> bool:
 
         return self.event_manager is not None
-    
-# ============================================================
-# Publishing
-# ============================================================
+
+    # ============================================================
+    # Publishing
+    # ============================================================
 
     def publish(
         self,
@@ -96,23 +97,15 @@ class EventEngine(
     ) -> EngineEvent:
 
         event = EngineEvent(
-
             name=name,
-
             description=description,
-
             severity=severity,
-
             source=source,
-
             payload=payload or {},
-
         )
 
         event.activate(
-
             tick=self.tick_count,
-
         )
 
         self.published_events += 1
@@ -120,33 +113,25 @@ class EventEngine(
         if self.event_manager is not None:
 
             self.event_manager.publish(
-
                 event,
-
             )
 
         return event
-    
-# ============================================================
-# Lifecycle Events
-# ============================================================
+
+    # ============================================================
+    # Lifecycle Events
+    # ============================================================
 
     def tick_started(
         self,
     ) -> EngineEvent:
 
         return self.publish(
-
             name="Tick Started",
-
             source="Scheduler",
-
             payload={
-
                 "tick": self.tick_count,
-
             },
-
         )
 
     def hour_started(
@@ -155,17 +140,11 @@ class EventEngine(
     ) -> EngineEvent:
 
         return self.publish(
-
             name="Hour Started",
-
             source="Scheduler",
-
             payload={
-
                 "hour": hour,
-
             },
-
         )
 
     def day_started(
@@ -174,36 +153,24 @@ class EventEngine(
     ) -> EngineEvent:
 
         return self.publish(
-
             name="Day Started",
-
             source="Scheduler",
-
             payload={
-
                 "day": day,
-
             },
-
         )
-    
+
     def month_started(
         self,
         month: int,
     ) -> EngineEvent:
 
         return self.publish(
-
             name="Month Started",
-
             source="Scheduler",
-
             payload={
-
                 "month": month,
-
             },
-
         )
 
     def year_started(
@@ -212,17 +179,11 @@ class EventEngine(
     ) -> EngineEvent:
 
         return self.publish(
-
             name="Year Started",
-
             source="Scheduler",
-
             payload={
-
                 "year": year,
-
             },
-
         )
 
     def sol_started(
@@ -231,19 +192,13 @@ class EventEngine(
     ) -> EngineEvent:
 
         return self.publish(
-
             name="Sol Started",
-
             source="Scheduler",
-
             payload={
-
                 "sol": sol,
-
             },
-
         )
-    
+
     # ========================================================
     # Runtime
     # ========================================================
@@ -277,17 +232,10 @@ class EventEngine(
         data = super().statistics()
 
         data.update(
-
             {
-
-                "published_events":
-                    self.published_events,
-
-                "connected":
-                    self.connected,
-
+                "published_events": self.published_events,
+                "connected": self.connected,
             }
-
         )
 
         return data
@@ -303,18 +251,13 @@ class EventEngine(
         data = super().serialize()
 
         data.update(
-
             {
-
-                "published_events":
-                    self.published_events,
-
+                "published_events": self.published_events,
             }
-
         )
 
         return data
-    
+
     @classmethod
     def deserialize(
         cls,
@@ -364,7 +307,7 @@ class EventEngine(
         )
 
         return manager
-    
+
     # ========================================================
     # Utility
     # ========================================================
@@ -388,7 +331,7 @@ class EventEngine(
     ) -> bool:
 
         return self.connected
-    
+
     # ========================================================
     # Representation
     # ========================================================
@@ -398,15 +341,10 @@ class EventEngine(
     ) -> str:
 
         return (
-
             "EventEngine("
-
             f"published={self.published_events}, "
-
             f"connected={self.connected}"
-
             ")"
-
         )
 
 

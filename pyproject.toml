@@ -1,7 +1,7 @@
 [project]
 name = "Habryn"
 version = "0.1.0"
-description = "A realistic Mars Space Colony simulation built with Mesa."
+description = "A Mars colony simulation with a custom simulation engine and Pygame CE visualization."
 readme = "README.md"
 requires-python = ">=3.12"
 
@@ -10,12 +10,7 @@ authors = [
 ]
 
 dependencies = [
-    "mesa>=3.2.0",
-    "solara>=1.44.0",
-    "numpy>=2.0.0",
-    "pandas>=2.2.0",
-    "matplotlib>=3.9.0",
-    "networkx>=3.3",
+    "pygame-ce>=2.5.0",
     "rich>=13.9.0",
     "loguru>=0.7.2"
 ]

@@ -17,7 +17,6 @@ from colony.resources.population import Population
 
 from colony.systems.base_manager import BaseManager
 
-
 # ============================================================
 # Population Manager
 # ============================================================
@@ -85,17 +84,12 @@ class PopulationManager(BaseManager):
     ) -> None:
 
         total = int(
-
             self.population.current_amount,
-
         )
 
         self.available_workers = max(
-
             0,
-
             total - self.employed,
-
         )
 
         self.unemployed = self.available_workers
@@ -109,17 +103,12 @@ class PopulationManager(BaseManager):
     ) -> None:
 
         total = int(
-
             self.population.current_amount,
-
         )
 
         self.available_workers = max(
-
             0,
-
             total - self.employed,
-
         )
 
         self.unemployed = self.available_workers
@@ -130,11 +119,8 @@ class PopulationManager(BaseManager):
     ) -> int:
 
         workers = min(
-
             workers,
-
             self.available_workers,
-
         )
 
         self.employed += workers
@@ -149,11 +135,8 @@ class PopulationManager(BaseManager):
     ) -> int:
 
         workers = min(
-
             workers,
-
             self.employed,
-
         )
 
         self.employed -= workers
@@ -161,7 +144,7 @@ class PopulationManager(BaseManager):
         self.update_workforce()
 
         return workers
-    
+
     # ========================================================
     # Housing
     # ========================================================
@@ -171,15 +154,10 @@ class PopulationManager(BaseManager):
     ) -> None:
 
         self.occupied_housing = min(
-
             int(
-
                 self.population.current_amount,
-
             ),
-
             self.housing_capacity,
-
         )
 
     @property
@@ -188,13 +166,8 @@ class PopulationManager(BaseManager):
     ) -> int:
 
         return max(
-
             0,
-
-            self.housing_capacity
-
-            - self.occupied_housing,
-
+            self.housing_capacity - self.occupied_housing,
         )
 
     @property
@@ -202,13 +175,7 @@ class PopulationManager(BaseManager):
         self,
     ) -> bool:
 
-        return (
-
-            self.occupied_housing
-
-            >= self.housing_capacity
-
-        )
+        return self.occupied_housing >= self.housing_capacity
 
     @property
     def housing_utilization(
@@ -219,14 +186,8 @@ class PopulationManager(BaseManager):
 
             return 0.0
 
-        return (
+        return (self.occupied_housing / self.housing_capacity) * 100.0
 
-            self.occupied_housing
-
-            / self.housing_capacity
-
-        ) * 100.0
-    
     # ========================================================
     # Morale & Health
     # ========================================================
@@ -236,17 +197,11 @@ class PopulationManager(BaseManager):
     ) -> None:
 
         self.morale = max(
-
             0.0,
-
             min(
-
                 100.0,
-
                 self.morale,
-
             ),
-
         )
 
     def update_health(
@@ -254,17 +209,11 @@ class PopulationManager(BaseManager):
     ) -> None:
 
         self.health = max(
-
             0.0,
-
             min(
-
                 100.0,
-
                 self.health,
-
             ),
-
         )
 
     def modify_morale(
@@ -298,9 +247,7 @@ class PopulationManager(BaseManager):
             return
 
         self.population.generate(
-
             self.growth_rate,
-
         )
 
     def deaths(
@@ -312,9 +259,7 @@ class PopulationManager(BaseManager):
             return
 
         self.population.consume(
-
             self.death_rate,
-
         )
 
     def immigration(
@@ -326,9 +271,7 @@ class PopulationManager(BaseManager):
             return
 
         self.population.generate(
-
             self.immigration_rate,
-
         )
 
     def emigration(
@@ -340,9 +283,7 @@ class PopulationManager(BaseManager):
             return
 
         self.population.consume(
-
             self.emigration_rate,
-
         )
 
     # ========================================================
@@ -355,9 +296,7 @@ class PopulationManager(BaseManager):
     ) -> int:
 
         return int(
-
             self.population.current_amount,
-
         )
 
     @property
@@ -371,13 +310,7 @@ class PopulationManager(BaseManager):
 
             return 0.0
 
-        return (
-
-            self.employed
-
-            / total
-
-        ) * 100.0
+        return (self.employed / total) * 100.0
 
     @property
     def unemployment_rate(
@@ -385,13 +318,8 @@ class PopulationManager(BaseManager):
     ) -> float:
 
         return max(
-
             0.0,
-
-            100.0
-
-            - self.employment_rate,
-
+            100.0 - self.employment_rate,
         )
 
     @property
@@ -399,32 +327,8 @@ class PopulationManager(BaseManager):
         self,
     ) -> float:
 
-        return (
+        return self.productivity * (self.morale / 100.0) * (self.health / 100.0)
 
-            self.productivity
-
-            *
-
-            (
-
-                self.morale
-
-                / 100.0
-
-            )
-
-            *
-
-            (
-
-                self.health
-
-                / 100.0
-
-            )
-
-        )
-    
     # ========================================================
     # Runtime Statistics
     # ========================================================
@@ -436,99 +340,47 @@ class PopulationManager(BaseManager):
         stats = super().statistics()
 
         stats.update(
-
             {
-
-                "population":
-                self.total_population,
-
-                "employed":
-                self.employed,
-
-                "unemployed":
-                self.unemployed,
-
-                "available_workers":
-                self.available_workers,
-
-                "housing_capacity":
-                self.housing_capacity,
-
-                "occupied_housing":
-                self.occupied_housing,
-
-                "housing_available":
-                self.housing_available,
-
-                "housing_utilization":
-                round(
-
+                "population": self.total_population,
+                "employed": self.employed,
+                "unemployed": self.unemployed,
+                "available_workers": self.available_workers,
+                "housing_capacity": self.housing_capacity,
+                "occupied_housing": self.occupied_housing,
+                "housing_available": self.housing_available,
+                "housing_utilization": round(
                     self.housing_utilization,
-
                     2,
-
                 ),
-
-                "employment_rate":
-                round(
-
+                "employment_rate": round(
                     self.employment_rate,
-
                     2,
-
                 ),
-
-                "unemployment_rate":
-                round(
-
+                "unemployment_rate": round(
                     self.unemployment_rate,
-
                     2,
-
                 ),
-
-                "morale":
-                round(
-
+                "morale": round(
                     self.morale,
-
                     2,
-
                 ),
-
-                "health":
-                round(
-
+                "health": round(
                     self.health,
-
                     2,
-
                 ),
-
-                "productivity":
-                round(
-
+                "productivity": round(
                     self.productivity,
-
                     2,
-
                 ),
-
-                "colony_productivity":
-                round(
-
+                "colony_productivity": round(
                     self.colony_productivity,
-
                     2,
-
                 ),
-
             }
-
         )
 
         return stats
-    
+
     # ========================================================
     # Utility
     # ========================================================
@@ -553,11 +405,8 @@ class PopulationManager(BaseManager):
     ) -> None:
 
         self.housing_capacity = max(
-
             0,
-
             capacity,
-
         )
 
         self.update_housing()
@@ -568,11 +417,8 @@ class PopulationManager(BaseManager):
     ) -> None:
 
         self.productivity = max(
-
             0.0,
-
             productivity,
-
         )
 
     def colony_status(
@@ -596,7 +442,7 @@ class PopulationManager(BaseManager):
             return "High Unemployment"
 
         return "Stable"
-    
+
     # ========================================================
     # Representation
     # ========================================================
@@ -606,19 +452,12 @@ class PopulationManager(BaseManager):
     ) -> str:
 
         return (
-
             "PopulationManager("
-
             f"population={self.total_population}, "
-
             f"workers={self.available_workers}, "
-
             f"morale={self.morale:.1f}%, "
-
             f"health={self.health:.1f}%"
-
             ")"
-
         )
 
 

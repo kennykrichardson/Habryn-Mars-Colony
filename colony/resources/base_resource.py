@@ -284,7 +284,6 @@ class BaseResource(ABC):
 
         return self.fill_percentage
 
-
     @property
     def utilization(
         self,
@@ -465,6 +464,8 @@ class BaseResource(ABC):
 
         self.total_produced += produced
 
+        self._sync_fields()
+
         self._update_state()
 
         return produced
@@ -522,6 +523,8 @@ class BaseResource(ABC):
         consumed = amount - remaining
 
         self.total_consumed += consumed
+
+        self._sync_fields()
 
         self._update_state()
 

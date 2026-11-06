@@ -22,11 +22,9 @@ Other managers report economic activity.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from dataclasses import field
 
 from colony.systems.base_manager import BaseManager
 from colony.systems.resource_manager import ResourceManager
-
 
 # ============================================================
 # Economy Manager
@@ -115,7 +113,7 @@ class EconomyManager(BaseManager):
         self.total_expenses += amount
 
         return True
-    
+
     # ========================================================
     # Income
     # ========================================================
@@ -177,7 +175,7 @@ class EconomyManager(BaseManager):
         self.trade_expenses += amount
 
         return True
-    
+
     # ========================================================
     # Budgets
     # ========================================================
@@ -226,7 +224,7 @@ class EconomyManager(BaseManager):
         self.reserve_funds += amount
 
         return True
-    
+
     # ========================================================
     # Runtime
     # ========================================================
@@ -259,19 +257,11 @@ class EconomyManager(BaseManager):
         self,
     ) -> None:
 
-        self.total_expenses += (
-
-            self.maintenance_cost
-
-        )
+        self.total_expenses += self.maintenance_cost
 
         if self.colony_credits >= self.maintenance_cost:
 
-            self.colony_credits -= (
-
-                self.maintenance_cost
-
-            )
+            self.colony_credits -= self.maintenance_cost
 
         else:
 
@@ -293,13 +283,7 @@ class EconomyManager(BaseManager):
         self,
     ) -> float:
 
-        return (
-
-            self.total_income
-
-            - self.total_expenses
-
-        )
+        return self.total_income - self.total_expenses
 
     @property
     def profitable(
@@ -333,7 +317,7 @@ class EconomyManager(BaseManager):
             return "Stable"
 
         return "Prosperous"
-    
+
     # ========================================================
     # Statistics
     # ========================================================
@@ -345,87 +329,58 @@ class EconomyManager(BaseManager):
         stats = super().statistics()
 
         stats.update(
-
             {
-
-                "credits":
-                round(
+                "credits": round(
                     self.colony_credits,
                     2,
                 ),
-
-                "income":
-                round(
+                "income": round(
                     self.total_income,
                     2,
                 ),
-
-                "expenses":
-                round(
+                "expenses": round(
                     self.total_expenses,
                     2,
                 ),
-
-                "net_income":
-                round(
+                "net_income": round(
                     self.net_income,
                     2,
                 ),
-
-                "trade_income":
-                round(
+                "trade_income": round(
                     self.trade_income,
                     2,
                 ),
-
-                "trade_expenses":
-                round(
+                "trade_expenses": round(
                     self.trade_expenses,
                     2,
                 ),
-
-                "maintenance_cost":
-                round(
+                "maintenance_cost": round(
                     self.maintenance_cost,
                     2,
                 ),
-
-                "construction_cost":
-                round(
+                "construction_cost": round(
                     self.construction_cost,
                     2,
                 ),
-
-                "research_budget":
-                round(
+                "research_budget": round(
                     self.research_budget,
                     2,
                 ),
-
-                "emergency_budget":
-                round(
+                "emergency_budget": round(
                     self.emergency_budget,
                     2,
                 ),
-
-                "reserve_funds":
-                round(
+                "reserve_funds": round(
                     self.reserve_funds,
                     2,
                 ),
-
-                "financial_health":
-                self.financial_health,
-
-                "profitable":
-                self.profitable,
-
+                "financial_health": self.financial_health,
+                "profitable": self.profitable,
             }
-
         )
 
         return stats
-    
+
     # ========================================================
     # Utility
     # ========================================================
@@ -471,41 +426,18 @@ class EconomyManager(BaseManager):
         data = super().serialize()
 
         data.update(
-
             {
-
-                "colony_credits":
-                self.colony_credits,
-
-                "total_income":
-                self.total_income,
-
-                "total_expenses":
-                self.total_expenses,
-
-                "trade_income":
-                self.trade_income,
-
-                "trade_expenses":
-                self.trade_expenses,
-
-                "maintenance_cost":
-                self.maintenance_cost,
-
-                "construction_cost":
-                self.construction_cost,
-
-                "research_budget":
-                self.research_budget,
-
-                "emergency_budget":
-                self.emergency_budget,
-
-                "reserve_funds":
-                self.reserve_funds,
-
+                "colony_credits": self.colony_credits,
+                "total_income": self.total_income,
+                "total_expenses": self.total_expenses,
+                "trade_income": self.trade_income,
+                "trade_expenses": self.trade_expenses,
+                "maintenance_cost": self.maintenance_cost,
+                "construction_cost": self.construction_cost,
+                "research_budget": self.research_budget,
+                "emergency_budget": self.emergency_budget,
+                "reserve_funds": self.reserve_funds,
             }
-
         )
 
         return data
@@ -604,7 +536,7 @@ class EconomyManager(BaseManager):
         )
 
         return manager
-    
+
     # ========================================================
     # Representation
     # ========================================================
@@ -614,17 +546,11 @@ class EconomyManager(BaseManager):
     ) -> str:
 
         return (
-
             "EconomyManager("
-
             f"credits={self.colony_credits:.2f}, "
-
             f"net={self.net_income:.2f}, "
-
             f"health='{self.financial_health}'"
-
             ")"
-
         )
 
 

@@ -132,9 +132,8 @@ class EmergencyManager(BaseManager):
 
         emergency.assigned_agent = agent
 
-        self.active_emergencies.append(
-            emergency,
-        )
+        if emergency not in self.active_emergencies:
+            self.active_emergencies.append(emergency)
 
         if emergency in self.emergency_queue:
 

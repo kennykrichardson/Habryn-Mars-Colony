@@ -150,11 +150,8 @@ class MarsMap:
     ) -> None:
 
         tile = self.get_tile(
-
             x,
-
             y,
-
         )
 
         if tile is None:
@@ -178,33 +175,20 @@ class MarsMap:
     ) -> None:
 
         tile = self.get_tile(
-
             x,
-
             y,
-
         )
 
         if tile is None:
 
             return
 
-        tile.resource_deposit[
-            resource
-        ] = (
-
+        tile.resource_deposit[resource] = (
             tile.resource_deposit.get(
-
                 resource,
-
                 0.0,
-
             )
-
-            +
-
-            amount
-
+            + amount
         )
 
     def remove_resource(
@@ -216,11 +200,8 @@ class MarsMap:
     ) -> float:
 
         tile = self.get_tile(
-
             x,
-
             y,
-
         )
 
         if tile is None:
@@ -228,19 +209,13 @@ class MarsMap:
             return 0.0
 
         available = tile.resource_deposit.get(
-
             resource,
-
             0.0,
-
         )
 
         removed = min(
-
             available,
-
             amount,
-
         )
 
         remaining = available - removed
@@ -248,21 +223,16 @@ class MarsMap:
         if remaining <= 0.0:
 
             tile.resource_deposit.pop(
-
                 resource,
-
                 None,
-
             )
 
         else:
 
-            tile.resource_deposit[
-                resource
-            ] = remaining
+            tile.resource_deposit[resource] = remaining
 
         return removed
-    
+
     def resource_amount(
         self,
         x: int,
@@ -271,11 +241,8 @@ class MarsMap:
     ) -> float:
 
         tile = self.get_tile(
-
             x,
-
             y,
-
         )
 
         if tile is None:
@@ -283,11 +250,8 @@ class MarsMap:
             return 0.0
 
         return tile.resource_deposit.get(
-
             resource,
-
             0.0,
-
         )
 
     def has_resource(
@@ -298,21 +262,12 @@ class MarsMap:
     ) -> bool:
 
         return (
-
             self.resource_amount(
-
                 x,
-
                 y,
-
                 resource,
-
             )
-
-            >
-
-            0.0
-
+            > 0.0
         )
 
     def set_walkable(
@@ -345,6 +300,9 @@ class MarsMap:
 
         ox, oy = origin
 
+        if width <= 0 or height <= 0:
+            return False
+
         # Validate footprint
 
         for dy in range(height):
@@ -356,29 +314,29 @@ class MarsMap:
                 y = oy + dy
 
                 if not self.in_bounds(
-
                     x,
-
                     y,
-
                 ):
 
                     return False
 
                 tile = self.get_tile(
-
                     x,
-
                     y,
-
                 )
 
                 if tile is None:
 
                     return False
 
+                if not tile.terrain.buildable:
+                    return False
+
                 if tile.occupied:
 
+                    return False
+
+                if tile.agents:
                     return False
 
         # Place footprint
@@ -388,11 +346,8 @@ class MarsMap:
             for dx in range(width):
 
                 tile = self.get_tile(
-
                     ox + dx,
-
                     oy + dy,
-
                 )
 
                 assert tile is not None
@@ -417,9 +372,7 @@ class MarsMap:
     ) -> None:
 
         tile = self.get_tile(
-
             *position,
-
         )
 
         if tile is None:
@@ -474,6 +427,9 @@ class MarsMap:
 
             return False
 
+        if not tile.walkable or tile.building is not None:
+            return False
+
         if agent not in tile.agents:
 
             tile.agents.append(
@@ -521,6 +477,10 @@ class MarsMap:
 
         if destination_tile is None or not destination_tile.walkable:
 
+            return False
+
+        source_tile = self.get_tile(*source)
+        if source_tile is None or agent not in source_tile.agents:
             return False
 
         self.remove_agent(
@@ -624,9 +584,13 @@ class MarsMap:
         self,
     ) -> list[Any]:
 
-        return [
-            tile.building for tile in self.tiles.values() if tile.building is not None
-        ]
+        result = []
+        seen = set()
+        for tile in self.tiles.values():
+            if tile.building is not None and id(tile.building) not in seen:
+                result.append(tile.building)
+                seen.add(id(tile.building))
+        return result
 
     def agents(
         self,
@@ -652,21 +616,12 @@ class MarsMap:
             return 0.0
 
         return (
-
             len(
-
                 self.explored_tiles(),
-
             )
-
-            /
-
-            len(
-
+            / len(
                 self.tiles,
-
             )
-
         ) * 100.0
 
     @property
@@ -679,21 +634,12 @@ class MarsMap:
             return 0.0
 
         return (
-
             len(
-
                 self.occupied_tiles(),
-
             )
-
-            /
-
-            len(
-
+            / len(
                 self.tiles,
-
             )
-
         ) * 100.0
 
     # ========================================================
@@ -733,65 +679,25 @@ class MarsMap:
     ) -> dict:
 
         return {
-
             "width": self.width,
-
             "height": self.height,
-
             "tiles": {
-
                 f"{x},{y}": {
-
-                    "terrain":
-
-                        tile.terrain.name,
-
-                    "walkable":
-
-                        tile.walkable,
-
-                    "occupied":
-
-                        tile.occupied,
-
-                    "explored":
-
-                        tile.explored,
-
-                    "elevation":
-
-                        tile.elevation,
-
-                    "radiation":
-
-                        tile.radiation,
-
-                    "temperature":
-
-                        tile.temperature,
-
-                    "hazard_level":
-
-                        tile.hazard_level,
-
-                    "region":
-
-                        tile.region,
-
-                    "resource_deposit":
-
-                        dict(
-
-                            tile.resource_deposit,
-
-                        ),
-
+                    "terrain": tile.terrain.name,
+                    "walkable": tile.walkable,
+                    "occupied": tile.occupied,
+                    "explored": tile.explored,
+                    "elevation": tile.elevation,
+                    "radiation": tile.radiation,
+                    "temperature": tile.temperature,
+                    "hazard_level": tile.hazard_level,
+                    "region": tile.region,
+                    "resource_deposit": dict(
+                        tile.resource_deposit,
+                    ),
                 }
-
                 for (x, y), tile in self.tiles.items()
-
             },
-
         }
 
     @classmethod
@@ -805,35 +711,23 @@ class MarsMap:
         )
 
         mars_map = cls(
-
             width=data["width"],
-
             height=data["height"],
-
         )
 
         for key, values in data.get(
-
             "tiles",
-
             {},
-
         ).items():
 
             x, y = map(
-
                 int,
-
                 key.split(","),
-
             )
 
             tile = mars_map.get_tile(
-
                 x,
-
                 y,
-
             )
 
             if tile is None:
@@ -841,93 +735,59 @@ class MarsMap:
                 continue
 
             terrain_name = values.get(
-
                 "terrain",
-
                 DEFAULT_TERRAIN.name,
-
             )
 
             tile.terrain = get_terrain(
-
                 terrain_name,
-
             )
 
             tile.walkable = values.get(
-
                 "walkable",
-
                 tile.terrain.walkable,
-
             )
 
             tile.occupied = values.get(
-
                 "occupied",
-
                 False,
-
             )
 
             tile.explored = values.get(
-
                 "explored",
-
                 False,
-
             )
 
             tile.elevation = values.get(
-
                 "elevation",
-
                 0.0,
-
             )
 
             tile.radiation = values.get(
-
                 "radiation",
-
                 0.0,
-
             )
 
             tile.temperature = values.get(
-
                 "temperature",
-
                 -60.0,
-
             )
 
             tile.hazard_level = values.get(
-
                 "hazard_level",
-
                 0.0,
-
             )
 
             tile.region = values.get(
-
                 "region",
-
                 "Unknown",
-
             )
 
             tile.resource_deposit = dict(
-
                 values.get(
-
                     "resource_deposit",
-
                     {},
-
                 )
-
             )
 
         return mars_map

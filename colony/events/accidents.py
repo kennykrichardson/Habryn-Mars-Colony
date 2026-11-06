@@ -39,6 +39,7 @@ from colony.events.base_event import (
 from colony.systems.base_manager import BaseManager
 from colony.systems.emergency_manager import (
     EmergencyManager,
+    EmergencySeverity,
 )
 
 from colony.events.event_manager import (
@@ -92,17 +93,13 @@ class AccidentSeverity(Enum):
 
     CRITICAL = EventSeverity.CRITICAL
 
+
 ACCIDENT_DAMAGE = {
-
     AccidentSeverity.MINOR: 10.0,
-
     AccidentSeverity.MODERATE: 25.0,
-
     AccidentSeverity.MAJOR: 50.0,
-
     AccidentSeverity.CRITICAL: 100.0,
-
-}    
+}
 
 # ============================================================
 # Accident Event
@@ -138,11 +135,8 @@ class Accident(
     ) -> bool:
 
         return isinstance(
-
             self.victim,
-
             Astronaut,
-
         )
 
     @property
@@ -151,11 +145,8 @@ class Accident(
     ) -> bool:
 
         return isinstance(
-
             self.victim,
-
             Robot,
-
         )
 
     @property
@@ -164,7 +155,8 @@ class Accident(
     ) -> bool:
 
         return self.severity == EventSeverity.CRITICAL
-    
+
+
 # ============================================================
 # Accident Manager
 # ============================================================
@@ -222,16 +214,8 @@ class AccidentManager(
         self,
     ) -> bool:
 
-        return (
+        return self.event_manager is not None and self.emergency_manager is not None
 
-            self.event_manager is not None
-
-            and
-
-            self.emergency_manager is not None
-
-        )
-    
     # ========================================================
     # Registration
     # ========================================================
@@ -244,9 +228,7 @@ class AccidentManager(
         if astronaut not in self.astronauts:
 
             self.astronauts.append(
-
                 astronaut,
-
             )
 
     def unregister_astronaut(
@@ -257,9 +239,7 @@ class AccidentManager(
         if astronaut in self.astronauts:
 
             self.astronauts.remove(
-
                 astronaut,
-
             )
 
     def register_robot(
@@ -270,9 +250,7 @@ class AccidentManager(
         if robot not in self.robots:
 
             self.robots.append(
-
                 robot,
-
             )
 
     def unregister_robot(
@@ -283,9 +261,7 @@ class AccidentManager(
         if robot in self.robots:
 
             self.robots.remove(
-
                 robot,
-
             )
 
     # ========================================================
@@ -298,90 +274,63 @@ class AccidentManager(
     ) -> Accident:
 
         accident_type = choice(
-
             list(AccidentType),
-
         )
 
         severity = choice(
-
             list(AccidentSeverity),
-
         )
 
-        damage = ACCIDENT_DAMAGE[
-            severity
-        ]
+        damage = ACCIDENT_DAMAGE[severity]
 
-        radiation = (
-
-            damage
-
-            if accident_type == AccidentType.RADIATION
-
-            else 0.0
-
-        )
+        radiation = damage if accident_type == AccidentType.RADIATION else 0.0
 
         accident = Accident(
-
             name=accident_type.value,
-
-            description=(
-                f"{accident_type.value} involving "
-                f"{victim}"
-            ),
-
+            description=(f"{accident_type.value} involving " f"{victim}"),
             severity=severity.value,
-
             accident_type=accident_type,
-
             victim=victim,
-
             damage=damage,
-
             radiation=radiation,
-
             requires_medical_attention=isinstance(
-
                 victim,
-
                 Astronaut,
-
             ),
-
             requires_robotics=isinstance(
-
                 victim,
-
                 Robot,
-
             ),
-
-            fatal=(
-
-                severity
-
-                == AccidentSeverity.CRITICAL
-
-            ),
-
+            fatal=(severity == AccidentSeverity.CRITICAL),
         )
+        accident.event_id = f"accident-{self.total_accidents + 1:06d}"
 
         accident.activate(
             tick=self.tick_count,
         )
 
         self.accidents.append(
-
             accident,
-
         )
 
         self.total_accidents += 1
 
+        victim.take_damage(damage)
+        if radiation > 0 and hasattr(victim, "radiation"):
+            victim.radiation += radiation
+        if accident.fatal and victim.alive:
+            victim.take_damage(victim.health)
+        if self.emergency_manager is not None and victim.alive and severity in {
+            AccidentSeverity.MODERATE, AccidentSeverity.MAJOR, AccidentSeverity.CRITICAL,
+        }:
+            self.emergency_manager.report_emergency(
+                title=f"{accident_type.value} involving {victim.name}",
+                description=f"{severity.name.title()} accident; medical or robotics response required.",
+                severity=EmergencySeverity[severity.value.name], source=victim, target=victim,
+                location=tuple(victim.position))
+
         return accident
-    
+
     # ========================================================
     # Runtime
     # ========================================================
@@ -399,39 +348,27 @@ class AccidentManager(
             if random() < self.accident_rate:
 
                 accident = self.create_accident(
-
                     astronaut,
-
                 )
 
                 if self.event_manager is not None:
 
                     self.event_manager.publish(
-
                         accident,
-
                     )
 
         for robot in self.robots:
 
-            if random() < (
-
-                self.accident_rate / 2.0
-
-            ):
+            if random() < (self.accident_rate / 2.0):
 
                 accident = self.create_accident(
-
                     robot,
-
                 )
 
                 if self.event_manager is not None:
 
                     self.event_manager.publish(
-
                         accident,
-
                     )
 
     def step(
@@ -454,20 +391,10 @@ class AccidentManager(
 
         super().daily_update()
 
-        finished = [
-
-            accident
-
-            for accident in self.accidents
-
-            if accident.is_finished
-
-        ]
+        finished = [accident for accident in self.accidents if accident.is_finished]
 
         self.resolved_accidents = len(
-
             finished,
-
         )
 
     # ========================================================
@@ -479,30 +406,14 @@ class AccidentManager(
         self,
     ) -> list[Accident]:
 
-        return [
-
-            accident
-
-            for accident in self.accidents
-
-            if accident.is_active
-
-        ]
+        return [accident for accident in self.accidents if accident.is_active]
 
     @property
     def finished_accidents(
         self,
     ) -> list[Accident]:
 
-        return [
-
-            accident
-
-            for accident in self.accidents
-
-            if accident.is_finished
-
-        ]
+        return [accident for accident in self.accidents if accident.is_finished]
 
     @property
     def accident_count(
@@ -510,9 +421,7 @@ class AccidentManager(
     ) -> int:
 
         return len(
-
             self.accidents,
-
         )
 
     @property
@@ -521,9 +430,7 @@ class AccidentManager(
     ) -> int:
 
         return len(
-
             self.astronauts,
-
         )
 
     @property
@@ -532,11 +439,9 @@ class AccidentManager(
     ) -> int:
 
         return len(
-
             self.robots,
-
         )
-    
+
     # ========================================================
     # Statistics
     # ========================================================
@@ -548,33 +453,16 @@ class AccidentManager(
         data = super().statistics()
 
         data.update(
-
             {
-
-                "astronauts":
-                    self.astronaut_count,
-
-                "robots":
-                    self.robot_count,
-
-                "accidents":
-                    self.accident_count,
-
-                "active_accidents":
-                    len(
-
-                        self.active_accidents,
-
-                    ),
-
-                "resolved_accidents":
-                    self.resolved_accidents,
-
-                "accident_rate":
-                    self.accident_rate,
-
+                "astronauts": self.astronaut_count,
+                "robots": self.robot_count,
+                "accidents": self.accident_count,
+                "active_accidents": len(
+                    self.active_accidents,
+                ),
+                "resolved_accidents": self.resolved_accidents,
+                "accident_rate": self.accident_rate,
             }
-
         )
 
         return data
@@ -588,19 +476,12 @@ class AccidentManager(
     ) -> str:
 
         return (
-
             "AccidentManager("
-
             f"active={len(self.active_accidents)}, "
-
             f"total={self.accident_count}, "
-
             f"astronauts={self.astronaut_count}, "
-
             f"robots={self.robot_count}"
-
             ")"
-
         )
 
 

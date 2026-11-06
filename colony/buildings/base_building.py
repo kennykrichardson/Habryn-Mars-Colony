@@ -283,6 +283,8 @@ class BaseBuilding:
 
         self.powered = powered
 
+        self.is_powered = powered
+
         self._update_state()
 
     # ========================================================
@@ -452,11 +454,11 @@ class BaseBuilding:
         if not self.operational:
 
             return
-        
+
         if self.receives_power and not self.is_powered:
 
             return
-        
+
         if self.emergency_shutdown:
 
             return

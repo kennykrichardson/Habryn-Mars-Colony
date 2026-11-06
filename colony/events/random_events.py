@@ -81,6 +81,7 @@ class RandomEventSeverity(Enum):
 
     CRITICAL = EventSeverity.CRITICAL
 
+
 # ============================================================
 # Random Event
 # ============================================================
@@ -100,6 +101,7 @@ class RandomEvent(
     penalty: float = 0.0
 
     global_event: bool = True
+
 
 # ============================================================
 # Random Event Manager
@@ -142,7 +144,7 @@ class RandomEventManager(
     ) -> bool:
 
         return self.event_manager is not None
-    
+
     # ========================================================
     # Event Generation
     # ========================================================
@@ -152,53 +154,37 @@ class RandomEventManager(
     ) -> RandomEvent:
 
         event_type = choice(
-
             list(RandomEventType),
-
         )
 
         severity = choice(
-
             list(RandomEventSeverity),
-
         )
 
         event = RandomEvent(
-
             name=event_type.value,
-
             description=event_type.value,
-
             severity=severity.value,
-
             event_type=event_type,
-
             probability=self.event_rate,
-
             reward=100.0,
-
             penalty=50.0,
-
             global_event=True,
-
         )
+        event.event_id = f"random-event-{self.total_events + 1:06d}"
 
         event.activate(
-
             tick=self.tick_count,
-
         )
 
         self.events.append(
-
             event,
-
         )
 
         self.total_events += 1
 
         return event
-    
+
     # ========================================================
     # Runtime
     # ========================================================
@@ -220,9 +206,7 @@ class RandomEventManager(
         if self.event_manager is not None:
 
             self.event_manager.publish(
-
                 event,
-
             )
 
     def step(
@@ -246,17 +230,7 @@ class RandomEventManager(
         super().daily_update()
 
         self.completed_events = len(
-
-            [
-
-                event
-
-                for event in self.events
-
-                if event.is_finished
-
-            ]
-
+            [event for event in self.events if event.is_finished]
         )
 
     # ========================================================
@@ -268,15 +242,7 @@ class RandomEventManager(
         self,
     ) -> list[RandomEvent]:
 
-        return [
-
-            event
-
-            for event in self.events
-
-            if event.is_active
-
-        ]
+        return [event for event in self.events if event.is_active]
 
     @property
     def event_count(
@@ -284,9 +250,7 @@ class RandomEventManager(
     ) -> int:
 
         return len(
-
             self.events,
-
         )
 
     @property
@@ -295,11 +259,9 @@ class RandomEventManager(
     ) -> int:
 
         return len(
-
             self.active_events,
-
         )
-    
+
     # ========================================================
     # Statistics
     # ========================================================
@@ -311,23 +273,12 @@ class RandomEventManager(
         data = super().statistics()
 
         data.update(
-
             {
-
-                "event_rate":
-                    self.event_rate,
-
-                "total_events":
-                    self.total_events,
-
-                "completed_events":
-                    self.completed_events,
-
-                "active_events":
-                    self.active_count,
-
+                "event_rate": self.event_rate,
+                "total_events": self.total_events,
+                "completed_events": self.completed_events,
+                "active_events": self.active_count,
             }
-
         )
 
         return data
@@ -343,24 +294,15 @@ class RandomEventManager(
         data = super().serialize()
 
         data.update(
-
             {
-
-                "event_rate":
-                    self.event_rate,
-
-                "total_events":
-                    self.total_events,
-
-                "completed_events":
-                    self.completed_events,
-
+                "event_rate": self.event_rate,
+                "total_events": self.total_events,
+                "completed_events": self.completed_events,
             }
-
         )
 
         return data
-    
+
     @classmethod
     def deserialize(
         cls,
@@ -420,7 +362,7 @@ class RandomEventManager(
         )
 
         return manager
-    
+
     # ========================================================
     # Representation
     # ========================================================
@@ -430,17 +372,11 @@ class RandomEventManager(
     ) -> str:
 
         return (
-
             "RandomEventManager("
-
             f"active={self.active_count}, "
-
             f"total={self.event_count}, "
-
             f"rate={self.event_rate}"
-
             ")"
-
         )
 
 

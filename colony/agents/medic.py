@@ -42,9 +42,7 @@ class Medic(Astronaut):
 
     radiation_treatment_rate: float = 3.0
 
-    current_patient: Optional[
-        Astronaut
-    ] = None
+    current_patient: Optional[Astronaut] = None
 
     patients_treated: int = 0
 
@@ -101,44 +99,26 @@ class Medic(Astronaut):
 
         self.state = AgentState.WORKING
 
-        amount = (
-
-            self.healing_rate
-
-            * (
-
-                self.skill_level(
-
-                    "medicine",
-
-                )
-
-                / 5
-
+        amount = self.healing_rate * (
+            self.skill_level(
+                "medicine",
             )
-
+            / 5
         )
 
         self.current_patient.heal(
-
             amount,
-
         )
 
         self.hours_worked += 1
 
         self.add_experience(
-
             5,
-
         )
 
         self.improve_skill(
-
             "medicine",
-
             5,
-
         )
 
         if self.current_patient.health >= 100.0:
@@ -152,7 +132,7 @@ class Medic(Astronaut):
         self.state = AgentState.IDLE
 
         return True
-    
+
     # ========================================================
     # Radiation Treatment
     # ========================================================
@@ -163,12 +143,8 @@ class Medic(Astronaut):
     ) -> None:
 
         patient.radiation = max(
-
             0.0,
-
-            patient.radiation
-            - self.radiation_treatment_rate,
-
+            patient.radiation - self.radiation_treatment_rate,
         )
 
         self.radiation_cases += 1
@@ -176,17 +152,12 @@ class Medic(Astronaut):
         self.hours_worked += 1
 
         self.add_experience(
-
             4,
-
         )
 
         self.improve_skill(
-
             "medicine",
-
             2,
-
         )
 
     # ========================================================
@@ -205,75 +176,44 @@ class Medic(Astronaut):
         self.hours_worked += 1
 
         self.add_experience(
-
             2,
-
         )
 
         self.improve_skill(
-
             "diagnosis",
-
             2,
-
         )
 
         self.state = AgentState.IDLE
 
         return {
-
             "health": round(
-
                 patient.health,
-
                 2,
-
             ),
-
             "oxygen": round(
-
                 patient.oxygen,
-
                 2,
-
             ),
-
             "hunger": round(
-
                 patient.hunger,
-
                 2,
-
             ),
-
             "thirst": round(
-
                 patient.thirst,
-
                 2,
-
             ),
-
             "fatigue": round(
-
                 patient.fatigue,
-
                 2,
-
             ),
-
             "radiation": round(
-
                 patient.radiation,
-
                 2,
-
             ),
-
             "alive": patient.alive,
-
         }
-    
+
     # ========================================================
     # Emergency Response
     # ========================================================
@@ -288,23 +228,17 @@ class Medic(Astronaut):
         self.emergencies_handled += 1
 
         patient.heal(
-
             20.0,
-
         )
 
         self.add_experience(
-
             10,
-
         )
 
         self.complete_task()
 
         self.change_stress(
-
             0.5,
-
         )
 
         self.state = AgentState.IDLE
@@ -339,19 +273,12 @@ class Medic(Astronaut):
                 critical += 1
 
         return {
-
             "healthy": healthy,
-
             "injured": injured,
-
             "critical": critical,
-
             "population": len(
-
                 astronauts,
-
             ),
-
         }
 
     # ========================================================
@@ -360,42 +287,32 @@ class Medic(Astronaut):
 
     def hourly_update(
         self,
+        needs_intensity: float = 1.0,
     ) -> None:
 
-        super().hourly_update()
+        super().hourly_update(needs_intensity)
 
         if self.state != AgentState.WORKING:
 
             return
 
         self.fatigue = min(
-
             100.0,
-
-            self.fatigue + 0.40,
-
+            self.fatigue + 0.40 * needs_intensity,
         )
 
         self.hunger = min(
-
             100.0,
-
-            self.hunger + 0.25,
-
+            self.hunger + 0.25 * needs_intensity,
         )
 
         self.thirst = min(
-
             100.0,
-
-            self.thirst + 0.30,
-
+            self.thirst + 0.30 * needs_intensity,
         )
 
         self.change_stress(
-
-            0.15,
-
+            0.15 * needs_intensity,
         )
 
     # ========================================================
@@ -409,29 +326,17 @@ class Medic(Astronaut):
         stats = super().statistics()
 
         stats.update(
-
             {
-
                 "specialization": self.specialization,
-
                 "healing_rate": self.healing_rate,
-
                 "treatment_speed": self.treatment_speed,
-
                 "diagnosis_speed": self.diagnosis_speed,
-
                 "radiation_treatment_rate": self.radiation_treatment_rate,
-
                 "patients_treated": self.patients_treated,
-
                 "diagnoses_completed": self.diagnoses_completed,
-
                 "emergencies_handled": self.emergencies_handled,
-
                 "radiation_cases": self.radiation_cases,
-
             }
-
         )
 
         return stats
@@ -445,21 +350,13 @@ class Medic(Astronaut):
     ) -> str:
 
         return (
-
             "Medic("
-
             f"id={self.unique_id}, "
-
             f"name='{self.name}', "
-
             f"level={self.level}, "
-
             f"patients={self.patients_treated}, "
-
             f"emergencies={self.emergencies_handled}"
-
             ")"
-
         )
 
 

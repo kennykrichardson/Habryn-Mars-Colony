@@ -46,9 +46,7 @@ class Scientist(Astronaut):
 
     innovation_bonus: float = 1.0
 
-    assigned_laboratory: Optional[
-        Laboratory
-    ] = None
+    assigned_laboratory: Optional[Laboratory] = None
 
     research_progress: float = 0.0
 
@@ -112,23 +110,14 @@ class Scientist(Astronaut):
         self.state = AgentState.RESEARCHING
 
         progress = (
-
             self.research_speed
-
             * self.innovation_bonus
-
             * (
-
                 self.skill_level(
-
                     "science",
-
                 )
-
                 / 5
-
             )
-
         )
 
         produced = self.assigned_laboratory.perform_research()
@@ -142,17 +131,12 @@ class Scientist(Astronaut):
         self.hours_worked += 1
 
         self.add_experience(
-
             5,
-
         )
 
         self.improve_skill(
-
             "science",
-
             5,
-
         )
 
         if self.research_progress >= 100.0:
@@ -166,7 +150,7 @@ class Scientist(Astronaut):
         self.state = AgentState.IDLE
 
         return True
-    
+
     # ========================================================
     # Analysis
     # ========================================================
@@ -194,13 +178,9 @@ class Scientist(Astronaut):
         self.state = AgentState.IDLE
 
         return {
-
             "sample": str(sample),
-
             "quality": "Analyzed",
-
             "scientist": self.name,
-
         }
 
     # ========================================================
@@ -211,22 +191,11 @@ class Scientist(Astronaut):
         self,
     ) -> bool:
 
-        chance = (
-
-            self.discovery_chance
-
-            * (
-
-                self.skill_level(
-
-                    "science",
-
-                )
-
-                / 5
-
+        chance = self.discovery_chance * (
+            self.skill_level(
+                "science",
             )
-
+            / 5
         )
 
         if random.random() > chance:
@@ -281,40 +250,32 @@ class Scientist(Astronaut):
 
     def hourly_update(
         self,
+        needs_intensity: float = 1.0,
     ) -> None:
 
-        super().hourly_update()
+        super().hourly_update(needs_intensity)
 
         if self.state != AgentState.RESEARCHING:
 
             return
 
         self.fatigue = min(
-
             100.0,
-
-            self.fatigue + 0.40,
-
+            self.fatigue + 0.40 * needs_intensity,
         )
 
         self.hunger = min(
-
             100.0,
-
-            self.hunger + 0.30,
-
+            self.hunger + 0.30 * needs_intensity,
         )
 
         self.thirst = min(
-
             100.0,
-
-            self.thirst + 0.35,
-
+            self.thirst + 0.35 * needs_intensity,
         )
 
         self.change_stress(
-            0.15,
+            0.15 * needs_intensity,
         )
 
     # ========================================================
@@ -328,59 +289,30 @@ class Scientist(Astronaut):
         stats = super().statistics()
 
         stats.update(
-
             {
-
                 "specialization": self.specialization,
-
                 "research_speed": self.research_speed,
-
                 "analysis_speed": self.analysis_speed,
-
                 "discovery_chance": round(
-
                     self.discovery_chance,
-
                     4,
-
                 ),
-
                 "innovation_bonus": round(
-
                     self.innovation_bonus,
-
                     2,
-
                 ),
-
                 "research_progress": round(
-
                     self.research_progress,
-
                     2,
-
                 ),
-
                 "projects_completed": self.projects_completed,
-
                 "discoveries": self.discoveries,
-
                 "analyses_completed": self.analyses_completed,
-
                 "technologies_unlocked": self.technologies_unlocked,
-
                 "assigned_laboratory": (
-
-                    self.assigned_laboratory.name
-
-                    if self.assigned_laboratory
-
-                    else None
-
+                    self.assigned_laboratory.name if self.assigned_laboratory else None
                 ),
-
             }
-
         )
 
         return stats
@@ -394,21 +326,13 @@ class Scientist(Astronaut):
     ) -> str:
 
         return (
-
             "Scientist("
-
             f"id={self.unique_id}, "
-
             f"name='{self.name}', "
-
             f"level={self.level}, "
-
             f"discoveries={self.discoveries}, "
-
             f"projects={self.projects_completed}"
-
             ")"
-
         )
 
 

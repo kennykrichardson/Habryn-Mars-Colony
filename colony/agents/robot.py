@@ -262,7 +262,12 @@ class Robot(BaseAgent):
         self,
     ) -> None:
 
-        super().hourly_update()
+        if not self.alive:
+            return
+
+        self.hours_alive += 1
+        if self.busy:
+            self.hours_worked += 1
 
         self.consume_battery(
             0.5,
@@ -323,6 +328,16 @@ class Robot(BaseAgent):
         cls,
         data: dict,
     ) -> "Robot":
+
+        data = dict(data)
+        if isinstance(data.get("state"), str):
+            data["state"] = AgentState(data["state"])
+        if isinstance(data.get("position"), list):
+            data["position"] = tuple(data["position"])
+        if isinstance(data.get("destination"), list):
+            data["destination"] = tuple(data["destination"])
+        if isinstance(data.get("path"), list):
+            data["path"] = [tuple(position) for position in data["path"]]
 
         robot_status = RobotStatus(
             data.pop(

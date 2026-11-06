@@ -226,35 +226,6 @@ class ResearchManager(BaseManager):
 
         super().step()
 
-        for project in self.active_projects:
-
-            if project.assigned_scientist is None:
-
-                continue
-
-            if hasattr(
-                project.assigned_scientist,
-                "skill_level",
-            ):
-
-                points = max(
-                    1.0,
-                    float(
-                        project.assigned_scientist.skill_level(
-                            "research",
-                        )
-                    ),
-                )
-
-            else:
-
-                points = 1.0
-
-            self.advance_project(
-                project,
-                points,
-            )
-
     def hourly_update(
         self,
     ) -> None:

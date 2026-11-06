@@ -38,6 +38,8 @@ class DayNightCycle:
 
     minute: int = 0
 
+    fractional_minute: float = 0.0
+
     sunlight: float = 1.0
 
     solar_efficiency: float = 1.0
@@ -56,13 +58,14 @@ class DayNightCycle:
 
     def step(
         self,
+        minutes: float = 1.0,
     ) -> None:
 
-        self.minute += 1
-
-        if self.minute >= self.sol_length:
-
-            self.minute = 0
+        self.fractional_minute += max(0.0, float(minutes))
+        whole_minutes = int(self.fractional_minute)
+        if whole_minutes:
+            self.minute = (self.minute + whole_minutes) % self.sol_length
+            self.fractional_minute -= whole_minutes
 
         self._update()
 
@@ -161,6 +164,7 @@ class DayNightCycle:
 
         return {
             "minute": self.minute,
+            "fractional_minute": self.fractional_minute,
             "hour": round(
                 self.hour,
                 2,
@@ -219,6 +223,7 @@ class DayNightCycle:
             "minute",
             0,
         )
+        cycle.fractional_minute = data.get("fractional_minute", 0.0)
 
         cycle.sunlight = data.get(
             "sunlight",
