@@ -59,6 +59,13 @@ Terminal Mission Control advances the simulation when you press **Enter**. Enter
 
 ---
 
+## Screenshots
+
+## Screenshots
+
+### Habryn's PyGame Interface
+![Habryn's PyGame Interface](screenshots/habryn-pygame-interface.png)
+
 ## 🎮 Graphical controls
 
 | Input | Action |
@@ -261,4 +268,4 @@ Habryn is an evolving experiment in simulation engineering, autonomous colony sy
 
 From the first habitat to a growing settlement, every Sol is another opportunity to make the colony more capable, resilient, and alive.
 
-**🪐 Welcome to Mars. Build carefully. Keep the crew alive. And don't let the oxygen run out. 🚀**
+**🪐 Welcome to Mars.
