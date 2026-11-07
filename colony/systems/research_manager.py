@@ -27,6 +27,16 @@ from typing import Any
 
 from colony.systems.base_manager import BaseManager
 
+
+RESEARCH_TECH_TREE = {
+    "Solar Efficiency": {"category": "Energy", "prerequisites": ()},
+    "Crop Yield": {"category": "Agriculture", "prerequisites": ("Solar Efficiency",)},
+    "Oxygen Recovery": {"category": "Life Support", "prerequisites": ()},
+    "Water Recovery": {"category": "Life Support", "prerequisites": ("Oxygen Recovery",)},
+    "Robotics": {"category": "Engineering", "prerequisites": ()},
+    "Medical Care": {"category": "Medicine", "prerequisites": ("Robotics",)},
+}
+
 # ============================================================
 # Research Project
 # ============================================================
@@ -50,6 +60,10 @@ class ResearchProject:
     completed: bool = False
 
     unlocked: bool = False
+
+    category: str = "General"
+
+    prerequisites: tuple[str, ...] = ()
 
 
 # ============================================================
@@ -82,11 +96,19 @@ class ResearchManager(BaseManager):
         priority: int = 1,
     ) -> ResearchProject:
 
+        technology = RESEARCH_TECH_TREE.get(name)
+        if technology:
+            completed = {item.name for item in self.completed_projects if item.completed}
+            missing = set(technology["prerequisites"]) - completed
+            if missing:
+                raise ValueError(f"Research {name} requires: {', '.join(sorted(missing))}")
         project = ResearchProject(
             name=name,
             description=description,
             required_points=required_points,
             priority=priority,
+            category=technology["category"] if technology else "General",
+            prerequisites=technology["prerequisites"] if technology else (),
         )
 
         self.research_queue.append(
@@ -175,6 +197,9 @@ class ResearchManager(BaseManager):
             self.active_projects.remove(
                 project,
             )
+
+        if project in self.research_queue:
+            self.research_queue.remove(project)
 
         self.completed_projects.append(
             project,

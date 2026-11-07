@@ -58,9 +58,7 @@ class Reactor(BaseBuilding):
 
     coolant_efficiency: float = 1.0
 
-    fuel: Fuel = field(
-        default_factory=Fuel,
-    )
+    fuel: Fuel | None = None
 
     power: Power = field(
         default_factory=Power,
@@ -82,7 +80,8 @@ class Reactor(BaseBuilding):
         self,
     ) -> float:
 
-        if not self.operational or self.fuel.current_amount < self.fuel_consumption:
+        if (not self.operational or self.fuel is None
+                or self.fuel.current_amount < self.fuel_consumption):
 
             return 0.0
 
@@ -143,7 +142,7 @@ class Reactor(BaseBuilding):
         self,
     ) -> bool:
 
-        return self.fuel.fill_percentage <= 15.0
+        return self.fuel is None or self.fuel.fill_percentage <= 15.0
 
     @property
     def overheating(
@@ -203,7 +202,7 @@ class Reactor(BaseBuilding):
                     self.total_fuel_consumed,
                     2,
                 ),
-                "fuel": self.fuel.statistics(),
+                "fuel": self.fuel.statistics() if self.fuel is not None else None,
                 "power": self.power.statistics(),
                 "heat": self.heat.statistics(),
             }
@@ -219,9 +218,11 @@ class Reactor(BaseBuilding):
         self,
         amount: float,
     ) -> float:
-
-        return self.fuel.generate(
-            amount,
+        """Reject magic refills; delivered colony stock is already reactor stock."""
+        if amount <= 0:
+            return 0.0
+        raise RuntimeError(
+            "Reactor fuel cannot be generated locally; deliver fuel into the shared colony inventory."
         )
 
     def improve_safety(
@@ -252,11 +253,13 @@ class Reactor(BaseBuilding):
         self,
     ) -> str:
 
+        fuel_status = (f"fuel={self.fuel.fill_percentage:.1f}%" if self.fuel is not None
+                       else "fuel=unassigned")
         return (
             "Reactor("
             f"health={self.health_percentage:.1f}%, "
             f"output={self.effective_output:.2f} kWh, "
-            f"fuel={self.fuel.fill_percentage:.1f}%, "
+            f"{fuel_status}, "
             f"safety={self.safety_rating:.2f}, "
             f"coolant={self.coolant_efficiency:.2f}"
             ")"

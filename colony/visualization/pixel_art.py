@@ -6,6 +6,7 @@ import hashlib
 import random
 
 import pygame
+from colony.visualization.building_visuals import building_visual
 
 PALETTE = {
     "void": (24, 20, 24), "soil": (133, 69, 52), "soil_light": (164, 91, 64),
@@ -28,55 +29,94 @@ def _seed(*parts: object) -> int:
     return int.from_bytes(hashlib.blake2b(value, digest_size=8).digest(), "little")
 
 
-@lru_cache(maxsize=8192)
-def terrain_tile(terrain: str, x: int, y: int, seed: int, explored: bool, platform: bool = False) -> pygame.Surface:
-    """A deterministic 16×16 tile texture. Cache key includes world coordinates."""
+@lru_cache(maxsize=4096)
+def terrain_tile(terrain: str, x: int, y: int, seed: int, explored: bool,
+                 platform: bool = False, size: int = 64, detail: int = 3) -> pygame.Surface:
+    """Generate deterministic terrain at native pixel resolution, with fine authored detail."""
+    size, detail = max(16, int(size)), max(1, min(4, int(detail)))
     rng = random.Random(_seed(seed, terrain, x, y))
-    surface = pygame.Surface((16, 16))
+    surface = pygame.Surface((size, size))
     base = PALETTE["shadow"] if platform else TERRAIN_COLORS.get(terrain, PALETTE["soil"])
     light = PALETTE["metal"] if platform else PALETTE["soil_light"]
     dark = PALETTE["shadow"] if platform else PALETTE["soil_dark"]
     surface.fill(base)
+    unit = size / 64
+
+    def u(value: int) -> int:
+        return max(1, round(value * unit))
+
     if platform:
-        for py in (3, 11):
-            pygame.draw.line(surface, (76, 71, 68), (0, py), (15, py))
-        pygame.draw.rect(surface, (125, 109, 93), (0, 0, 16, 1))
-        pygame.draw.rect(surface, (38, 35, 37), (0, 15, 16, 1))
-        for px, py in ((2, 2), (13, 2), (2, 13), (13, 13)):
-            surface.set_at((px, py), PALETTE["amber"])
+        for p in (16, 32, 48):
+            pygame.draw.line(surface, (76, 71, 68), (0, u(p)), (size - 1, u(p)))
+            pygame.draw.line(surface, (76, 71, 68), (u(p), 0), (u(p), size - 1))
+        pygame.draw.rect(surface, (125, 109, 93), (0, 0, size, u(2)))
+        pygame.draw.rect(surface, (38, 35, 37), (0, size - u(2), size, u(2)))
+        for px, py in ((4, 4), (60, 4), (4, 60), (60, 60)):
+            pygame.draw.rect(surface, PALETTE["amber"], (u(px), u(py), u(3), u(3)))
+        for _ in range(4 * detail):
+            pygame.draw.circle(surface, (133, 111, 92), (rng.randrange(size), rng.randrange(size)), u(1))
     else:
-        for _ in range(19):
-            px, py = rng.randrange(1, 15), rng.randrange(1, 15)
-            color = light if rng.random() > .43 else dark
-            surface.set_at((px, py), color)
-            if rng.random() > .76:
-                surface.set_at((min(15, px + 1), py), color)
+        # Grain, chips and rock flakes are authored at the requested resolution.
+        for _ in range(70 * detail):
+            px, py = rng.randrange(size), rng.randrange(size)
+            color = light if rng.random() > .48 else dark
+            radius = 1 if detail < 3 or rng.random() > .12 else 2
+            pygame.draw.rect(surface, color, (px, py, u(radius), u(radius)))
+        for _ in range(2 * detail):
+            px, py = rng.randrange(u(4), size - u(4)), rng.randrange(u(4), size - u(4))
+            rw, rh = rng.randint(u(3), u(9)), rng.randint(u(2), u(6))
+            points = [(px, py + rh), (px + rw // 4, py), (px + rw, py + rh // 3),
+                      (px + rw * 3 // 4, py + rh)]
+            pygame.draw.polygon(surface, dark, points)
+            pygame.draw.line(surface, light, (px + rw // 3, py + 1),
+                             (px + rw * 2 // 3, py + rh // 3), u(1))
         if terrain == "Crater":
-            pygame.draw.rect(surface, dark, (3, 4, 9, 6))
-            pygame.draw.rect(surface, light, (4, 3, 7, 1))
-            pygame.draw.rect(surface, PALETTE["soil"], (5, 5, 5, 3))
+            bounds = pygame.Rect(u(8), u(13), u(48), u(37))
+            pygame.draw.ellipse(surface, dark, bounds)
+            pygame.draw.ellipse(surface, light, bounds.inflate(-u(6), -u(5)), u(2))
+            pygame.draw.ellipse(surface, (81, 49, 45), bounds.inflate(-u(16), -u(12)))
+            pygame.draw.arc(surface, PALETTE["soil_light"], bounds.inflate(-u(5), -u(4)), .1, 2.5, u(2))
         elif terrain in {"Rock", "Cliff", "Lava Tube"}:
-            pygame.draw.rect(surface, dark, (4, 6, 8, 6))
-            pygame.draw.rect(surface, light, (5, 5, 5, 2))
+            points = [(u(10), u(48)), (u(15), u(24)), (u(26), u(9)), (u(42), u(16)),
+                      (u(53), u(35)), (u(47), u(51)), (u(25), u(56))]
+            pygame.draw.polygon(surface, dark, points)
+            pygame.draw.lines(surface, light, False, points[1:5], u(2))
+            for offset in range(1, detail + 1):
+                sx, sy = u(17 + offset * 5), u(39 - offset * 4)
+                pygame.draw.line(surface, (119, 94, 81), (sx, sy), (sx + u(5), sy + u(3)), u(1))
+            if terrain == "Lava Tube":
+                pygame.draw.ellipse(surface, PALETTE["void"], (u(24), u(31), u(20), u(16)))
+                pygame.draw.arc(surface, (134, 76, 59), (u(20), u(26), u(28), u(24)), 0, 3.14, u(3))
         elif terrain == "Sand":
-            pygame.draw.line(surface, dark, (1, 12), (7, 10))
-            pygame.draw.line(surface, light, (8, 4), (14, 3))
+            for row in range(5):
+                py, phase = u(10 + row * 10), rng.randrange(u(8))
+                for px in range(-u(8), size, u(16)):
+                    pygame.draw.arc(surface, dark, (px + phase, py, u(19), u(8)), .1, 2.8, u(1))
+                    pygame.draw.arc(surface, light, (px + phase, py - u(2), u(19), u(8)), .1, 2.8, u(1))
         elif terrain == "Ice":
-            pygame.draw.line(surface, (190, 211, 200), (2, 4), (6, 8))
-            pygame.draw.line(surface, (190, 211, 200), (11, 9), (14, 12))
+            for _ in range(detail + 2):
+                sx, sy = rng.randrange(size), rng.randrange(size)
+                ex, ey = sx + rng.randint(-u(14), u(14)), sy + rng.randint(u(5), u(18))
+                pygame.draw.line(surface, (190, 211, 200), (sx, sy), (ex, ey), u(2))
+                pygame.draw.line(surface, (74, 114, 126), (sx + u(2), sy), (ex + u(2), ey), u(1))
+            pygame.draw.polygon(surface, (181, 205, 196), [(u(7), u(8)), (u(20), u(5)), (u(13), u(17))])
     if not explored:
-        shade = pygame.Surface((16, 16), pygame.SRCALPHA)
+        shade = pygame.Surface((size, size), pygame.SRCALPHA)
         shade.fill((17, 17, 23, 155))
         surface.blit(shade, (0, 0))
-        # Visible, faint survey grid distinguishes unknown terrain.
-        for p in (0, 8):
-            pygame.draw.line(surface, (57, 50, 55), (p, 0), (p, 15))
-            pygame.draw.line(surface, (57, 50, 55), (0, p), (15, p))
+        for p in (0, size // 2):
+            pygame.draw.line(surface, (57, 50, 55), (p, 0), (p, size - 1), u(1))
+            pygame.draw.line(surface, (57, 50, 55), (0, p), (size - 1, p), u(1))
     return surface
 
 
-def _building_art(surface: pygame.Surface, kind: str, online: bool, damaged: bool) -> None:
+def _building_art(surface: pygame.Surface, kind: str, online: bool, damaged: bool,
+                  status: str = "operational", detail: int = 2) -> None:
     w, h = surface.get_size()
+    identity = building_visual(kind)
+    primary = PALETTE[str(identity["primary"])]
+    secondary = PALETTE[str(identity["secondary"])]
+    accent = PALETTE[str(identity["accent"])]
     surface.fill((0, 0, 0, 0))
     if w < 8 or h < 8:
         return
@@ -85,15 +125,15 @@ def _building_art(surface: pygame.Surface, kind: str, online: bool, damaged: boo
     pygame.draw.rect(surface, (120, 91, 70), (1, h - 5, w - 2, 2))
     cx = w // 2
     if "Solar" in kind:
-        pygame.draw.rect(surface, PALETTE["cream"], (2, h // 2, max(4, w // 3), max(4, h // 3)))
+        pygame.draw.rect(surface, primary, (2, h // 2, max(4, w // 3), max(4, h // 3)))
         for px in range(w // 2, w - 2, max(4, w // 6)):
             pygame.draw.rect(surface, PALETTE["blue"], (px, 3, max(3, w // 7), max(4, h - 8)))
             pygame.draw.line(surface, PALETTE["cyan"], (px + 1, 4), (px + 1, h - 6))
         pygame.draw.line(surface, PALETTE["metal"], (w // 2, h // 2), (w // 2, h - 5), 2)
     elif "Reactor" in kind:
-        pygame.draw.rect(surface, PALETTE["cream"], (2, 4, w - 4, h - 8))
-        pygame.draw.rect(surface, PALETTE["metal"], (4, 2, w - 8, 5))
-        pygame.draw.rect(surface, PALETTE["amber"] if online else PALETTE["shadow"], (cx - 2, 7, 4, 4))
+        pygame.draw.rect(surface, primary, (2, 4, w - 4, h - 8))
+        pygame.draw.rect(surface, secondary, (4, 2, w - 8, 5))
+        pygame.draw.rect(surface, accent if online else PALETTE["shadow"], (cx - 2, 7, 4, 4))
         pygame.draw.rect(surface, PALETTE["shadow"], (w - 8, 2, 3, h // 2))
     elif "Greenhouse" in kind:
         pygame.draw.rect(surface, PALETTE["metal"], (2, 4, w - 4, h - 9))
@@ -102,35 +142,68 @@ def _building_art(surface: pygame.Surface, kind: str, online: bool, damaged: boo
             pygame.draw.line(surface, PALETTE["cream"], (px, 6), (px, h - 5))
         pygame.draw.rect(surface, PALETTE["green"], (5, h // 2, 3, 3))
         pygame.draw.rect(surface, PALETTE["green"], (w - 9, h // 2 + 2, 3, 3))
+    elif "FuelDepot" in kind:
+        pygame.draw.rect(surface, PALETTE["shadow"], (2, h // 3, w - 4, h // 2))
+        for px in (w // 4, w // 2 - 2, 3 * w // 4 - 4):
+            pygame.draw.rect(surface, primary, (px, h // 3, max(5, w // 5), h // 3))
+            pygame.draw.rect(surface, accent, (px + 1, h // 3 + 2, max(3, w // 5 - 2), 2))
+        pygame.draw.line(surface, secondary, (3, h // 3), (w - 3, h // 3), 2)
+        pygame.draw.rect(surface, PALETTE["red"], (w - 8, h // 2, 4, 3))
+    elif "OxygenGenerator" in kind:
+        pygame.draw.rect(surface, primary, (3, h // 3, w - 6, h // 2))
+        pygame.draw.rect(surface, secondary, (5, h // 3 + 2, w - 10, h // 3))
+        for px in (w // 4, w // 2 - 2, 3 * w // 4 - 4):
+            pygame.draw.rect(surface, accent, (px, 4, 4, h // 4))
+            pygame.draw.line(surface, PALETTE["white"], (px + 1, 5), (px + 1, h // 4 + 2))
+        pygame.draw.line(surface, PALETTE["cyan"], (4, h - 7), (w - 4, h - 7), 2)
     elif "Oxygen" in kind:
         pygame.draw.rect(surface, PALETTE["cream"], (3, 6, w - 6, h - 11))
-        pygame.draw.rect(surface, PALETTE["cyan"], (5, 8, max(4, w - 10), max(4, h // 4)))
+        pygame.draw.rect(surface, primary, (5, 8, max(4, w - 10), max(4, h // 4)))
         for px in range(5, w - 4, 5):
-            pygame.draw.rect(surface, PALETTE["metal"], (px, h // 2 + 2, 2, h // 4))
+            pygame.draw.rect(surface, secondary, (px, h // 2 + 2, 2, h // 4))
+            pygame.draw.rect(surface, accent, (px, h // 2 + 1, 2, 2))
+    elif "FoodWarehouse" in kind:
+        pygame.draw.rect(surface, primary, (2, h // 3, w - 4, h // 2))
+        pygame.draw.rect(surface, secondary, (4, h // 3 + 2, w - 8, h // 2 - 4))
+        for px in range(6, w - 5, 8):
+            pygame.draw.rect(surface, accent, (px, h // 2, 4, 5))
+        pygame.draw.rect(surface, PALETTE["green"], (cx - 3, 4, 6, 4))
+    elif "MaterialsWarehouse" in kind or "GeneralCargoDepot" in kind:
+        pygame.draw.rect(surface, primary, (2, h // 3, w - 4, h // 2))
+        pygame.draw.rect(surface, secondary, (4, h // 3 + 2, w - 8, h // 2 - 4))
+        for px in range(5, w - 4, 7):
+            pygame.draw.rect(surface, accent, (px, h // 2, 5, h // 5))
+            pygame.draw.line(surface, PALETTE["shadow"], (px, h // 2), (px, h // 2 + h // 5))
+    elif "WaterPlant" in kind:
+        pygame.draw.rect(surface, primary, (2, h // 3, w - 4, h // 2))
+        pygame.draw.rect(surface, secondary, (4, h // 3 + 2, w // 3, h // 3))
+        pygame.draw.rect(surface, PALETTE["glass"], (w // 2, h // 3 + 2, w // 3 - 2, h // 3))
+        pygame.draw.line(surface, accent, (4, h // 3), (w - 4, h // 3), 2)
+        pygame.draw.line(surface, accent, (w // 2, h // 3), (w // 2, h - 5), 2)
     elif "Water" in kind:
-        pygame.draw.rect(surface, PALETTE["cream"], (3, 6, w - 6, h - 11))
-        pygame.draw.rect(surface, PALETTE["blue"], (5, 8, w - 10, h // 3))
-        pygame.draw.rect(surface, PALETTE["cyan"], (w - 7, 2, 3, h - 8))
+        pygame.draw.rect(surface, secondary if "Reservoir" in kind else PALETTE["cream"], (3, 6, w - 6, h - 11))
+        pygame.draw.rect(surface, primary, (5, 8, w - 10, h // 3))
+        pygame.draw.rect(surface, accent, (w - 7, 2, 3, h - 8))
     elif "Battery" in kind:
         pygame.draw.rect(surface, PALETTE["metal"], (3, 4, w - 6, h - 9))
         pygame.draw.rect(surface, PALETTE["cream"], (5, 2, w - 10, 3))
         pygame.draw.rect(surface, PALETTE["amber"] if online else PALETTE["shadow"], (w // 2 - 2, h // 2 - 2, 4, 5))
     elif "Medical" in kind:
-        pygame.draw.rect(surface, PALETTE["cream"], (2, 5, w - 4, h - 10))
-        pygame.draw.rect(surface, PALETTE["glass"], (4, 7, max(4, w - 8), max(4, h // 4)))
-        pygame.draw.rect(surface, PALETTE["red"], (cx - 2, h // 2, 5, 3))
-        pygame.draw.rect(surface, PALETTE["red"], (cx - 1, h // 2 - 1, 3, 5))
+        pygame.draw.rect(surface, primary, (2, 5, w - 4, h - 10))
+        pygame.draw.rect(surface, secondary, (4, 7, max(4, w - 8), max(4, h // 4)))
+        pygame.draw.rect(surface, accent, (cx - 2, h // 2, 5, 3))
+        pygame.draw.rect(surface, accent, (cx - 1, h // 2 - 1, 3, 5))
     elif "Storage" in kind:
-        pygame.draw.rect(surface, PALETTE["cream"], (2, 5, w - 4, h - 10))
-        pygame.draw.rect(surface, PALETTE["metal"], (2, 5, w - 4, 3))
+        pygame.draw.rect(surface, primary, (2, 5, w - 4, h - 10))
+        pygame.draw.rect(surface, secondary, (2, 5, w - 4, 3))
         for px in range(5, w - 3, 7):
-            pygame.draw.rect(surface, PALETTE["sand"], (px, h // 2, 5, max(3, h // 4)))
+            pygame.draw.rect(surface, accent, (px, h // 2, 5, max(3, h // 4)))
             pygame.draw.line(surface, PALETTE["shadow"], (px, h // 2), (px, h // 2 + max(3, h // 4)))
     elif "Workshop" in kind:
-        pygame.draw.rect(surface, PALETTE["metal"], (2, 6, w - 4, h - 11))
-        pygame.draw.rect(surface, PALETTE["cream"], (4, 8, w - 8, h - 15))
-        pygame.draw.rect(surface, PALETTE["amber"], (5, h // 2 + 1, max(4, w // 4), 3))
-        pygame.draw.line(surface, PALETTE["metal"], (w // 2, 3), (w // 2, h - 5), 2)
+        pygame.draw.rect(surface, primary, (2, 6, w - 4, h - 11))
+        pygame.draw.rect(surface, secondary, (4, 8, w - 8, h - 15))
+        pygame.draw.rect(surface, accent, (5, h // 2 + 1, max(4, w // 4), 3))
+        pygame.draw.line(surface, primary, (w // 2, 3), (w // 2, h - 5), 2)
         pygame.draw.rect(surface, PALETTE["cyan"], (w - 8, 3, 4, 3))
     elif "Mine" in kind:
         pygame.draw.rect(surface, PALETTE["rock"], (1, h // 3, w - 2, h // 2))
@@ -149,18 +222,18 @@ def _building_art(surface: pygame.Surface, kind: str, online: bool, damaged: boo
         pygame.draw.polygon(surface, PALETTE["red"], [(cx - 3, h // 3), (cx, h // 4), (cx + 3, h // 3)])
         pygame.draw.rect(surface, PALETTE["amber"], (cx - 2, h // 2 - 2, 4, 3))
     elif "Laboratory" in kind:
-        pygame.draw.rect(surface, PALETTE["cream"], (2, h // 2, w - 4, h // 3))
-        pygame.draw.rect(surface, PALETTE["glass"], (4, 4, w - 8, h // 2))
-        pygame.draw.rect(surface, PALETTE["cyan"], (6, h // 3, w - 12, 4))
+        pygame.draw.rect(surface, primary, (2, h // 2, w - 4, h // 3))
+        pygame.draw.rect(surface, secondary, (4, 4, w - 8, h // 2))
+        pygame.draw.rect(surface, accent, (6, h // 3, w - 12, 4))
         pygame.draw.rect(surface, PALETTE["metal"], (cx - 2, 2, 4, 3))
     elif "Communications" in kind:
-        pygame.draw.rect(surface, PALETTE["cream"], (3, h // 2, w - 6, h // 3))
-        pygame.draw.line(surface, PALETTE["metal"], (cx, h // 2), (cx, 3), 2)
-        pygame.draw.arc(surface, PALETTE["cyan"], (cx - 7, 1, 14, 12), 0, 3.14, 2)
-        pygame.draw.circle(surface, PALETTE["amber"], (cx, 5), 2)
+        pygame.draw.rect(surface, primary, (3, h // 2, w - 6, h // 3))
+        pygame.draw.line(surface, secondary, (cx, h // 2), (cx, 3), 2)
+        pygame.draw.arc(surface, accent, (cx - 7, 1, 14, 12), 0, 3.14, 2)
+        pygame.draw.circle(surface, accent, (cx, 5), 2)
     elif "Habitat" in kind:
         body_y = max(4, h // 3)
-        pygame.draw.rect(surface, PALETTE["cream"], (2, body_y, w - 4, h - body_y - 5))
+        pygame.draw.rect(surface, primary, (2, body_y, w - 4, h - body_y - 5))
         pygame.draw.rect(surface, (174, 143, 109), (3, body_y, w - 6, 2))
         pygame.draw.rect(surface, PALETTE["glass"], (5, body_y + 4, 5, 4))
         pygame.draw.rect(surface, PALETTE["shadow"], (cx - 3, h - 12, 6, 7))
@@ -174,19 +247,63 @@ def _building_art(surface: pygame.Surface, kind: str, online: bool, damaged: boo
             px = 5 + i * max(6, (w - 10) // window_count)
             pygame.draw.rect(surface, PALETTE["glass"], (px, body_y + 4, 4, 4))
         pygame.draw.rect(surface, PALETTE["shadow"], (cx - 3, h - 12, 6, 7))
-        pygame.draw.rect(surface, PALETTE["amber"] if online else PALETTE["shadow"], (cx - 1, h - 10, 2, 2))
+        pygame.draw.rect(surface, accent if online else PALETTE["shadow"], (cx - 1, h - 10, 2, 2))
         pygame.draw.rect(surface, PALETTE["metal"], (0, body_y + 2, 3, h // 3))
     # Actual operational fields drive small lamps and damage marks.
     pygame.draw.rect(surface, (126, 195, 126) if online else PALETTE["red"], (w - 5, 1, 3, 3))
+    if status == "construction":
+        pygame.draw.line(surface, PALETTE["amber"], (2, h // 2), (w - 3, 2), 2)
+        pygame.draw.line(surface, PALETTE["amber"], (w - 3, h // 2), (2, 2), 2)
+    elif status == "maintenance":
+        pygame.draw.rect(surface, PALETTE["amber"], (2, 2, 4, 4))
+    elif status == "abandoned":
+        pygame.draw.rect(surface, (40, 38, 42, 112), (1, 1, w - 2, h - 6))
+    elif status == "shortage":
+        pygame.draw.rect(surface, PALETTE["amber"], (2, 2, 4, 4))
     if damaged:
         pygame.draw.line(surface, PALETTE["red"], (2, 2), (min(w - 2, 8), min(h - 2, 8)), 2)
+    if detail >= 2 and w >= 48 and h >= 48:
+        # Fine seams, fasteners, warning panels and roof equipment are drawn at
+        # the final sprite resolution, not baked into a small master image.
+        for px in range(8, w - 6, max(12, w // 9)):
+            pygame.draw.rect(surface, (197, 181, 151), (px, h - 8, 2, 2))
+        if "Greenhouse" in kind:
+            for px in range(10, w - 8, max(9, w // 12)):
+                pygame.draw.line(surface, (149, 203, 139), (px, h // 2),
+                                 (px + 2, h - 9), 2)
+                pygame.draw.line(surface, (222, 218, 169), (px - 1, h - 12),
+                                 (px + 3, h - 12), 1)
+        elif "Solar" in kind:
+            for px in range(w // 2, w - 4, max(4, w // 16)):
+                pygame.draw.line(surface, (112, 174, 188), (px, 5), (px, h - 7), 1)
+            pygame.draw.rect(surface, PALETTE["amber"], (4, h - 12, max(6, w // 5), 3))
+        elif "Fuel" in kind:
+            pygame.draw.line(surface, PALETTE["white"], (6, h // 2), (w - 7, h // 2), 2)
+            for px in range(8, w - 8, max(8, w // 10)):
+                pygame.draw.rect(surface, PALETTE["red"], (px, h // 2 + 4, 4, 2))
+        elif "Oxygen" in kind:
+            for px in range(9, w - 8, max(8, w // 10)):
+                pygame.draw.circle(surface, (219, 242, 232), (px, h // 2 + 4), 2)
+        elif "Laboratory" in kind:
+            pygame.draw.line(surface, (175, 140, 208), (6, h // 2), (w - 7, h // 2), 2)
+            pygame.draw.circle(surface, PALETTE["cyan"], (w // 2, h // 3), max(2, w // 24))
+        elif "Mine" in kind:
+            for px in range(w // 4, 3 * w // 4, max(8, w // 12)):
+                pygame.draw.line(surface, PALETTE["amber"], (px, h // 3), (px, h // 3 + 8), 2)
+        elif "Habitat" in kind:
+            for px in range(9, w - 8, max(12, w // 9)):
+                pygame.draw.rect(surface, (251, 206, 125), (px, h // 2, 5, 5))
+        if detail >= 3:
+            for px, py in ((5, 5), (w - 8, 6), (6, h - 12), (w - 9, h - 12)):
+                pygame.draw.circle(surface, (202, 184, 154), (px, py), 2)
 
 
 @lru_cache(maxsize=512)
-def building_sprite(kind: str, width: int, height: int, online: bool, damaged: bool) -> pygame.Surface:
+def building_sprite(kind: str, width: int, height: int, online: bool, damaged: bool,
+                    status: str = "operational", detail: int = 2) -> pygame.Surface:
     width, height = max(8, width), max(8, height)
     surface = pygame.Surface((width, height), pygame.SRCALPHA)
-    _building_art(surface, kind, online, damaged)
+    _building_art(surface, kind, online, damaged, status, detail)
     return surface
 
 
@@ -203,23 +320,83 @@ def character_sprite(
     working: bool,
     appearance: dict | None = None,
     activity: str | None = None,
+    detail: int = 1,
 ) -> pygame.Surface:
     """Return an identity-specific detailed sprite frame at native pixel scale."""
     appearance = appearance or {}
     appearance_key = tuple(sorted((key, _freeze(value)) for key, value in appearance.items()))
     action = (activity or ("working" if working else "idle")).lower()
-    return _character_sprite_cached(robot, frame % 4, direction % 4, appearance_key, action)
+    return _character_sprite_cached(robot, frame % 4, direction % 4, appearance_key, action,
+                                    max(1, min(3, detail)))
 
 
 @lru_cache(maxsize=2048)
 def _character_sprite_cached(robot: bool, frame: int, direction: int, appearance_key: tuple,
-                             activity: str) -> pygame.Surface:
+                             activity: str, detail: int) -> pygame.Surface:
     appearance = dict(appearance_key)
     sprite = pygame.Surface((64, 56) if robot else (48, 64), pygame.SRCALPHA)
     if robot:
         _draw_robot(sprite, frame, direction, activity, appearance)
     else:
         _draw_astronaut(sprite, frame, direction, activity, appearance)
+    return _refine_character(sprite, robot, appearance, activity, detail)
+
+
+def _refine_character(base: pygame.Surface, robot: bool, appearance: dict,
+                      activity: str, detail: int) -> pygame.Surface:
+    if detail <= 1:
+        return base
+    factor = detail
+    sprite = pygame.transform.scale(base, (base.get_width() * factor, base.get_height() * factor))
+    def box(color, rect, width=0):
+        pygame.draw.rect(sprite, color, tuple(round(value * factor) for value in rect),
+                         max(0, round(width * factor)))
+    def line(color, start, end, width=1):
+        pygame.draw.line(sprite, color, tuple(round(value * factor) for value in start),
+                         tuple(round(value * factor) for value in end), max(1, round(width * factor)))
+    if robot:
+        # Add machining, wheel hubs, suspension links and visible carried cargo.
+        for px in range(9, 58, 8):
+            pygame.draw.circle(sprite, PALETTE["white"], (px * factor, 47 * factor), 2 * factor)
+            line(PALETTE["shadow"], (px + 3, 44), (px + 5, 47), 1)
+        for px in (14, 25, 36, 47):
+            box((179, 195, 188), (px, 29, 2, 1))
+        box(PALETTE["amber"], (12, 21, 5, 2))
+        if appearance.get("carrying_load"):
+            box(PALETTE["shadow"], (18, 15, 29, 10))
+            box(PALETTE["amber"], (20, 16, 25, 7))
+            line(PALETTE["cream"], (22, 19), (43, 19), 1)
+            for px in (22, 44):
+                line(PALETTE["metal"], (px, 23), (px, 26), 1)
+        if detail >= 3:
+            box(PALETTE["cyan"], (28, 8, 3, 2))
+            box(PALETTE["white"], (33, 8, 2, 2))
+            for px in range(12, 52, 8):
+                line(PALETTE["metal"], (px, 42), (px + 3, 49), 1)
+    else:
+        # Fine suit seams, life-support labels, reflective helmet glints and
+        # role-color shoulder identifiers remain crisp at larger zoom levels.
+        suit = tuple(appearance.get("suit_color", PALETTE["cream_light"]))
+        trim = tuple(appearance.get("trim_color", PALETTE["red"]))
+        line((244, 228, 186), (18, 27), (18, 42), 1)
+        line((85, 89, 87), (32, 27), (32, 42), 1)
+        box(trim, (15, 29, 2, 4))
+        box((244, 225, 175), (22, 32, 5, 2))
+        for px in (19, 22, 25, 28):
+            box((122, 135, 131), (px, 45, 1, 7))
+        box((111, 164, 177), (20, 10, 5, 1))
+        box((231, 245, 235), (24, 9, 3, 1))
+        if "farm" in str(appearance.get("accessory", "")).lower():
+            box(PALETTE["green"], (36, 38, 5, 2))
+        if detail >= 3:
+            for y in (31, 35, 39):
+                line(tuple(max(0, c - 22) for c in suit), (18, y), (30, y), 1)
+            box(PALETTE["cyan"], (39, 38, 2, 2))
+    if activity in {"working", "repairing", "operating equipment", "emergency response"}:
+        x = sprite.get_width() - 9 * factor
+        y = 32 * factor
+        pygame.draw.circle(sprite, PALETTE["amber"], (x, y), 2 * factor)
+        pygame.draw.circle(sprite, PALETTE["white"], (x, y), factor)
     return sprite
 
 

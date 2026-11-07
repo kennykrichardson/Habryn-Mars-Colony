@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 # ============================================================
 # Building State
@@ -57,6 +57,10 @@ class BuildingState(Enum):
 
 @dataclass
 class BaseBuilding:
+
+    # One map tile is a 16-bit pixel-art cell; all standard structures occupy
+    # the same 3×3 grid unless a specific building class overrides this.
+    default_footprint: ClassVar[tuple[int, int]] = (3, 3)
 
     # --------------------------------------------------------
     # Identity

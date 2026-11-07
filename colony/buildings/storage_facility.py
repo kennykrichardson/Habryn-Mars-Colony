@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from dataclasses import field
+from typing import ClassVar
 
 from colony.buildings.base_building import BaseBuilding
 
@@ -21,6 +22,7 @@ from colony.resources.water import Water
 from colony.resources.food import Food
 from colony.resources.oxygen import Oxygen
 from colony.resources.minerals import Minerals
+from colony.resources.fuel import Fuel
 
 # ============================================================
 # Storage Facility
@@ -29,6 +31,16 @@ from colony.resources.minerals import Minerals
 
 @dataclass
 class StorageFacility(BaseBuilding):
+
+    accepted_resource_names: ClassVar[frozenset[str] | None] = None
+
+    minimum_reserve: float = 0.0
+
+    target_reserve: float = 0.0
+
+    emergency_reserve: float = 0.0
+
+    maximum_stock: float = 0.0
 
     building_id: int = 0
 
@@ -70,7 +82,14 @@ class StorageFacility(BaseBuilding):
         default_factory=Minerals,
     )
 
+    # Bound by ColonyModel to the single colony-wide Fuel inventory.
+    fuel: Fuel | None = None
+
     total_resources_transferred: float = 0.0
+
+    def accepts_resource(self, resource_name: str) -> bool:
+        """Storage routing policy; stock remains in ResourceManager's ledger."""
+        return self.accepted_resource_names is None or resource_name in self.accepted_resource_names
 
     # ========================================================
     # Runtime

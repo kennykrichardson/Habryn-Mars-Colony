@@ -57,7 +57,7 @@ class ConstructionProject:
 
     task_id: str | None = None
 
-    footprint: tuple[int, int] = (1, 1)
+    footprint: tuple[int, int] = (3, 3)
 
 
 # ============================================================

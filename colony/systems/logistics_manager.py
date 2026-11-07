@@ -25,6 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from collections import deque
 from typing import Any
+from uuid import uuid4
 
 from colony.systems.base_manager import BaseManager
 
@@ -45,6 +46,12 @@ class TransportRequest:
     assigned_robot: Any | None = None
 
     completed: bool = False
+
+    request_id: str = field(default_factory=lambda: str(uuid4()))
+    loading_progress: float = 0.0
+    travel_progress: float = 0.0
+    unloading_progress: float = 0.0
+    failed: bool = False
 
 
 # ============================================================
@@ -139,10 +146,12 @@ class LogisticsManager(BaseManager):
 
             return None
 
-        highest = max(
-            self.delivery_queue,
-            key=lambda request: request.priority,
-        )
+        highest = max((request for request in self.delivery_queue
+                       if not request.completed and not request.failed),
+                      key=lambda request: request.priority, default=None)
+
+        if highest is None:
+            return None
 
         self.delivery_queue.remove(
             highest,
@@ -168,7 +177,9 @@ class LogisticsManager(BaseManager):
         request: TransportRequest,
     ) -> None:
 
-        self.failed_deliveries += 1
+        if not request.failed and not request.completed:
+            request.failed = True
+            self.failed_deliveries += 1
 
     # ========================================================
     # Queries
@@ -178,7 +189,8 @@ class LogisticsManager(BaseManager):
         self,
     ) -> list[TransportRequest]:
 
-        return [request for request in self.delivery_queue if not request.completed]
+        return [request for request in self.delivery_queue
+                if not request.completed and not request.failed]
 
     def requests_for_robot(
         self,
@@ -189,6 +201,8 @@ class LogisticsManager(BaseManager):
             request
             for request in self.delivery_queue
             if request.assigned_robot == robot
+            and not request.completed
+            and not request.failed
         ]
 
     def requests_for_resource(
@@ -197,7 +211,8 @@ class LogisticsManager(BaseManager):
     ) -> list[TransportRequest]:
 
         return [
-            request for request in self.delivery_queue if request.resource == resource
+            request for request in self.delivery_queue
+            if request.resource == resource and not request.completed and not request.failed
         ]
 
         # ========================================================
@@ -308,6 +323,11 @@ class LogisticsManager(BaseManager):
                         "amount": request.amount,
                         "priority": request.priority,
                         "completed": request.completed,
+                        "request_id": request.request_id,
+                        "loading_progress": request.loading_progress,
+                        "travel_progress": request.travel_progress,
+                        "unloading_progress": request.unloading_progress,
+                        "failed": request.failed,
                     }
                     for request in self.delivery_queue
                 ],

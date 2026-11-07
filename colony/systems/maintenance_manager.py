@@ -98,6 +98,12 @@ class MaintenanceManager(BaseManager):
         repair_amount: float = 10.0,
     ) -> MaintenanceRequest:
 
+        for existing in self.maintenance_queue:
+            if existing.building is building and not existing.completed:
+                existing.priority = max(existing.priority, priority)
+                existing.repair_amount = max(existing.repair_amount, repair_amount)
+                return existing
+
         request = MaintenanceRequest(
             building=building,
             priority=priority,

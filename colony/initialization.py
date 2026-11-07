@@ -22,6 +22,11 @@ from colony.buildings.medical_bay import MedicalBay
 from colony.buildings.mine import Mine
 from colony.buildings.recycling_plant import RecyclingPlant
 from colony.buildings.storage_facility import StorageFacility
+from colony.buildings.fuel_depot import FuelDepot
+from colony.buildings.water_reservoir import WaterReservoir
+from colony.buildings.food_warehouse import FoodWarehouse
+from colony.buildings.oxygen_storage_facility import OxygenStorageFacility
+from colony.buildings.materials_warehouse import MaterialsWarehouse
 from colony.buildings.workshop import Workshop
 from colony.buildings.communications_center import CommunicationsCenter
 from colony.environment.terrain import PLAINS, ROCK, SAND, ICE, CRATER
@@ -143,20 +148,53 @@ def initialize_colony(model, config: ColonyConfig) -> None:
         terrain_weights = [weight for _name, weight in config.terrain_distribution]
     else:
         terrain_types, terrain_weights = (PLAINS, PLAINS, SAND, ROCK, ICE, CRATER), None
+    center = config.settlement_position or (config.width // 2, config.height // 2)
+    region_size = max(8, int((config.width * config.height / 36) ** 0.5))
+    columns = (config.width + region_size - 1) // region_size
+    rows = (config.height + region_size - 1) // region_size
+    regions = []
+    for row in range(rows):
+        for column in range(columns):
+            x = min(config.width - 1, column * region_size + region_size // 2
+                    + rng.randint(-region_size // 4, region_size // 4))
+            y = min(config.height - 1, row * region_size + region_size // 2
+                    + rng.randint(-region_size // 4, region_size // 4))
+            terrain = rng.choice(terrain_types) if terrain_weights is None else rng.choices(
+                terrain_types, weights=terrain_weights, k=1)[0]
+            regions.append((x, y, terrain))
+    region_names = {"Plains": "Rocky Plains", "Rock": "Basalt Highlands", "Sand": "Dune Fields",
+                    "Ice": "Frozen Valley", "Crater": "Crater Field", "Cliff": "Canyon Rim",
+                    "Lava Tube": "Volcanic Region"}
     for tile in model.mars_map.tiles.values():
-        tile.terrain = rng.choice(terrain_types) if terrain_weights is None else rng.choices(
-            terrain_types, weights=terrain_weights, k=1)[0]
+        region_id, region = min(
+            enumerate(regions), key=lambda item: (tile.x - item[1][0]) ** 2 + (tile.y - item[1][1]) ** 2)
+        terrain = region[2]
+        tile.terrain = terrain
         tile.walkable = tile.terrain.walkable
         tile.elevation = rng.uniform(-1.5, 1.5)
         tile.radiation = rng.uniform(0.0, 0.08) * config.radiation_severity
+        tile.region = f"{region_names.get(terrain.name, terrain.name)} {region_id + 1:02d}"
+        if terrain.name == "Ice" and rng.random() < 0.12:
+            model.mars_map.add_resource(tile.x, tile.y, "Water",
+                                        rng.uniform(250.0, 900.0) * config.deposit_abundance)
+        elif terrain.name == "Rock" and rng.random() < 0.10:
+            model.mars_map.add_resource(tile.x, tile.y, "Minerals",
+                                        rng.uniform(150.0, 650.0) * config.deposit_abundance)
     # The first settlement lies on a stable, walkable plain with nearby deposits.
-    center = config.settlement_position or (config.width // 2, config.height // 2)
-    for dy in range(-4, 5):
-        for dx in range(-4, 5):
+    for dy in range(-10, 11):
+        for dx in range(-10, 11):
             model.mars_map.set_terrain(center[0] + dx, center[1] + dy, PLAINS)
             tile = model.mars_map.get_tile(center[0] + dx, center[1] + dy)
             if tile:
                 tile.explored = True
+                tile.region = "Settlement"
+    target_explored = round(config.width * config.height * 0.40)
+    unexplored_positions = [position for position, tile in model.mars_map.tiles.items() if not tile.explored]
+    additional = min(max(0, target_explored - len(model.mars_map.explored_tiles())),
+                     len(unexplored_positions))
+    for position in rng.sample(unexplored_positions, additional):
+        model.mars_map.explore(*position)
+    model.register_visible_deposits()
     for dx, dy, amount in ((-6, -2, 1400.0), (6, 2, 850.0), (0, 7, 500.0)):
         x = min(config.width - 1, max(0, center[0] + dx))
         y = min(config.height - 1, max(0, center[1] + dy))
@@ -200,46 +238,67 @@ def initialize_colony(model, config: ColonyConfig) -> None:
     if not config.populate:
         return
 
-    buildings = [
-        (Habitat(building_id=1, position=(center[0] - 3, center[1] - 3)), (2, 2)),
-        (SolarArray(building_id=2, position=(center[0] + 1, center[1] - 3)), (2, 2)),
-        (Reactor(building_id=3, position=(center[0] - 3, center[1] + 1)), (2, 2)),
-        (OxygenGenerator(building_id=4, position=(center[0], center[1] + 1)), (1, 1)),
-        (WaterPlant(building_id=5, position=(center[0] + 2, center[1] + 1)), (1, 1)),
-        (Greenhouse(building_id=6, position=(center[0] + 1, center[1] - 1)), (2, 2)),
-        (Battery(building_id=7, position=(center[0] + 4, center[1] - 1)), (1, 1)),
-    ]
-    scenario_buildings = {
-        "Research Outpost": [(Laboratory(building_id=8, position=(center[0] - 1, center[1] - 3)), (2, 2)),
-            (CommunicationsCenter(building_id=9, position=(center[0] + 3, center[1] - 3)), (2, 2)),
-            (MedicalBay(building_id=10, position=(center[0] - 4, center[1] + 3)), (2, 2))],
-        "Industrial Base": [(Mine(building_id=8, position=(center[0] - 5, center[1] + 1)), (2, 2)),
-            (Workshop(building_id=9, position=(center[0] + 4, center[1] + 2)), (2, 2)),
-            (StorageFacility(building_id=10, position=(center[0] + 3, center[1] - 4)), (2, 2)),
-            (RecyclingPlant(building_id=11, position=(center[0] - 5, center[1] - 3)), (2, 2))],
-        "Established Settlement": [(Laboratory(building_id=8, position=(center[0] - 1, center[1] - 3)), (2, 2)),
-            (Workshop(building_id=9, position=(center[0] + 4, center[1] + 2)), (2, 2)),
-            (MedicalBay(building_id=10, position=(center[0] - 4, center[1] + 3)), (2, 2)),
-            (StorageFacility(building_id=11, position=(center[0] + 3, center[1] - 4)), (2, 2))],
+    building_catalog = {
+        "Habitat": Habitat, "SolarArray": SolarArray, "Reactor": Reactor,
+        "OxygenGenerator": OxygenGenerator, "WaterPlant": WaterPlant,
+        "Greenhouse": Greenhouse, "Battery": Battery,
+        "Laboratory": Laboratory, "CommunicationsCenter": CommunicationsCenter,
+        "MedicalBay": MedicalBay, "Mine": Mine, "Workshop": Workshop,
+        "StorageFacility": StorageFacility, "RecyclingPlant": RecyclingPlant,
+        "FuelDepot": FuelDepot, "WaterReservoir": WaterReservoir,
+        "FoodWarehouse": FoodWarehouse, "OxygenStorageFacility": OxygenStorageFacility,
+        "MaterialsWarehouse": MaterialsWarehouse,
     }
-    if config.initial_buildings is None:
-        buildings.extend(scenario_buildings.get(config.scenario_name, []))
+    scenario_names = {
+        "Research Outpost": ("Laboratory", "CommunicationsCenter", "MedicalBay"),
+        "Industrial Base": ("Mine", "Workshop", "RecyclingPlant"),
+        "Established Settlement": ("Laboratory", "Workshop", "MedicalBay"),
+    }
+    names = ["Habitat", "SolarArray", "Reactor", "OxygenGenerator", "WaterPlant",
+             "Greenhouse", "Battery"]
+    if min(config.width, config.height) >= 16:
+        names.extend(("FuelDepot", "WaterReservoir", "FoodWarehouse",
+                      "OxygenStorageFacility", "MaterialsWarehouse"))
     else:
-        catalog = {type(building).__name__: (building, footprint) for building, footprint in buildings}
-        for entries in scenario_buildings.values():
-            catalog.update((type(building).__name__, (building, footprint)) for building, footprint in entries)
-        missing = [name for name in config.initial_buildings if name not in catalog]
-        if missing:
-            raise ValueError(f"Unknown initial buildings: {', '.join(missing)}")
-        buildings = [catalog[name] for name in config.initial_buildings]
-    for building, footprint in buildings:
+        names.append("StorageFacility")
+    names.extend(scenario_names.get(config.scenario_name, ()))
+    if config.initial_buildings is not None:
+        names = list(config.initial_buildings)
+    missing = [name for name in names if name not in building_catalog]
+    if missing:
+        raise ValueError(f"Unknown initial buildings: {', '.join(missing)}")
+    spacing = 4 if min(config.width, config.height) >= 16 else 3
+    slots = [(x, y) for y in range(0, config.height - 2, spacing)
+             for x in range(0, config.width - 2, spacing)]
+    slots.sort(key=lambda pos: (abs(pos[0] + 1 - center[0]) + abs(pos[1] + 1 - center[1]), pos[1], pos[0]))
+    next_id = 1
+    for name in names:
+        building_class = building_catalog[name]
+        width, height = building_class.default_footprint
+        position = next((slot for slot in slots
+                         if all((tile := model.mars_map.get_tile(slot[0] + dx, slot[1] + dy)) is not None
+                                and tile.terrain.buildable and not tile.occupied and not tile.agents
+                                for dy in range(height) for dx in range(width))), None)
+        if position is None:
+            raise ValueError(f"No available {width}x{height} site for initial {name}")
+        building = building_class(building_id=next_id, position=position)
+        next_id += 1
+        slots.remove(position)
         for attribute in ("power_output", "oxygen_output", "water_output", "science_output"):
             if attribute in getattr(building, "__dataclass_fields__", {}):
                 setattr(building, attribute, getattr(building, attribute) * config.production_modifier)
         if hasattr(building, "growth_bonus"):
             building.growth_bonus = min(2.0, building.growth_bonus * config.production_modifier)
-        model.place_building(building, *footprint)
+        if not model.place_building(building):
+            raise ValueError(f"Could not place initial {name} at {position}")
 
+    fuel_sites = [(x, y) for (x, y), tile in model.mars_map.tiles.items()
+                  if not tile.occupied and tile.terrain.buildable and tile.walkable]
+    fuel_sites.sort(key=lambda pos: (abs(pos[0] - center[0]) + abs(pos[1] - center[1]), pos[1], pos[0]))
+    for position in fuel_sites[-3:]:
+        model.mars_map.add_resource(*position, "Fuel", 400.0 * config.deposit_abundance)
+
+    model.register_visible_deposits()
     crew_types = (Engineer, Scientist, Farmer, Medic, Astronaut, Astronaut)
     distribution = dict(config.profession_distribution)
     if distribution:
@@ -249,9 +308,20 @@ def initialize_colony(model, config: ColonyConfig) -> None:
                   for _ in range(count) if name in profession_classes]
         if chosen:
             crew_types = tuple(chosen)
-    available = [(center[0] + dx, center[1] + dy)
-                 for dy in range(-5, 6) for dx in range(-5, 6)
-                 if model.mars_map.in_bounds(center[0] + dx, center[1] + dy)]
+    population_total = config.astronauts + config.robots
+    radius = max(5, int((population_total * 2) ** 0.5) + 3)
+    available = [(x, y)
+                 for y in range(max(0, center[1] - radius), min(config.height, center[1] + radius + 1))
+                 for x in range(max(0, center[0] - radius), min(config.width, center[0] + radius + 1))
+                 if (tile := model.mars_map.get_tile(x, y)) is not None and tile.walkable
+                 and not tile.occupied and tile.building is None and not tile.agents]
+    if len(available) < population_total:
+        nearby = set(available)
+        available.extend((x, y) for (x, y), tile in model.mars_map.tiles.items()
+                         if (x, y) not in nearby and tile.walkable and not tile.occupied
+                         and tile.building is None and not tile.agents)
+    if len(available) < population_total:
+        raise ValueError(f"Map has space for only {len(available)} of {population_total} starting agents")
     rng.shuffle(available)
     for index in range(config.astronauts):
         position = next(p for p in available if model.mars_map.get_tile(*p).walkable
@@ -270,7 +340,12 @@ def initialize_colony(model, config: ColonyConfig) -> None:
                         and not model.mars_map.get_tile(*p).occupied
                         and not model.mars_map.get_tile(*p).agents)
         available.remove(position)
-        agent = Robot(unique_id=1001 + index, name=f"Rover {index + 1}",
+        roles = ("exploration", "mining", "cargo", "construction", "maintenance")
+        role = roles[index % len(roles)]
+        tools = {"exploration": ["camera", "spectrometer"], "mining": ["drill"],
+                 "cargo": ["cargo_bay"], "construction": ["loader"],
+                 "maintenance": ["repair_arm"]}[role]
+        agent = Robot(unique_id=1001 + index, name=f"{role.replace('_', ' ').title()} Rover {index + 1}",
                       profession="Colony Robot", position=position,
-                      serial_number=f"HAB-R{index + 1:03}")
+                      serial_number=f"HAB-R{index + 1:03}", role=role, tools=tools)
         model.register_agent(agent)

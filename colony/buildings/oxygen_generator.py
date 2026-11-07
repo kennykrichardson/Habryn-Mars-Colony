@@ -25,6 +25,7 @@ from colony.buildings.base_building import BaseBuilding
 
 from colony.resources.oxygen import Oxygen
 from colony.resources.power import Power
+from colony.resources.water import Water
 
 # ============================================================
 # Oxygen Generator
@@ -48,12 +49,18 @@ class OxygenGenerator(BaseBuilding):
 
     oxygen_output: float = 25.0
 
+    water_per_oxygen: float = 1.125
+
     oxygen: Oxygen = field(
         default_factory=Oxygen,
     )
 
     power: Power = field(
         default_factory=Power,
+    )
+
+    water: Water = field(
+        default_factory=Water,
     )
 
     total_oxygen_generated: float = 0.0
@@ -99,11 +106,17 @@ class OxygenGenerator(BaseBuilding):
 
             return 0.0
 
+        generated = min(self.oxygen_output * self.efficiency, self.oxygen.available_capacity)
+        water_required = generated * self.water_per_oxygen
+        if generated <= 0.0 or self.water.current_amount < water_required:
+            return 0.0
+
+        if self.water.consume(water_required) < water_required:
+            return 0.0
+
         self.power.consume(
             self.power_required,
         )
-
-        generated = self.oxygen_output * self.efficiency
 
         produced = self.oxygen.generate(
             generated,
@@ -160,6 +173,7 @@ class OxygenGenerator(BaseBuilding):
                     self.oxygen_output,
                     2,
                 ),
+                "water_per_oxygen": round(self.water_per_oxygen, 3),
                 "effective_output": round(
                     self.effective_output,
                     2,

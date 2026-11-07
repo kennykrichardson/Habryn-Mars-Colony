@@ -33,8 +33,12 @@ def initialize_character(agent, seed: int | None) -> None:
         robot = "robot" in type(agent).__name__.lower()
         suit = SUIT_COLORS[rng.randrange(len(SUIT_COLORS))]
         visor = VISOR_COLORS[rng.randrange(len(VISOR_COLORS))]
+        role_visuals = {"exploration": "rover", "mining": "science", "cargo": "transport",
+                        "construction": "construction", "maintenance": "maintenance"}
         agent.appearance = {
-            "robot_type": ROBOT_TYPES[(agent.unique_id - 1001) % len(ROBOT_TYPES)] if robot else None,
+            "robot_type": (role_visuals.get(getattr(agent, "role", "general"),
+                                             ROBOT_TYPES[(agent.unique_id - 1001) % len(ROBOT_TYPES)])
+                           if robot else None),
             "suit_color": suit,
             "trim_color": ((agent.unique_id * 37) % 120 + 90, (agent.unique_id * 59) % 100 + 95, (agent.unique_id * 23) % 120 + 85),
             "visor_color": visor,

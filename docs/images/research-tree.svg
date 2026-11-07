@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">Habryn technology tree</title>
+  <desc id="desc">Six technologies grouped by field. Crop Yield follows Solar Efficiency; Water Recovery follows Oxygen Recovery; Medical Care follows Robotics. The three root technologies have no prerequisites.</desc>
+  <defs>
+    <linearGradient id="bg" x2="0" y2="1"><stop stop-color="#211a20"/><stop offset="1" stop-color="#302326"/></linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#e09a58"/></marker>
+    <style>
+      text{font-family:Inter,Segoe UI,sans-serif;fill:#f1dfc1}.title{font-size:30px;font-weight:700;letter-spacing:1px}.sub{font-size:15px;fill:#bda58e}.field{font-size:13px;font-weight:700;fill:#6acdd5;letter-spacing:1px}.name{font-size:18px;font-weight:700}.effect{font-size:13px;fill:#d3c0a9}.node{fill:#392b30;stroke:#9b6b50;stroke-width:2}.root{fill:#142c32;stroke:#6acdd5;stroke-width:2}.edge{fill:none;stroke:#e09a58;stroke-width:3;marker-end:url(#arrow)}.rule{stroke:#584148;stroke-width:1}
+    </style>
+  </defs>
+  <rect width="1280" height="720" rx="20" fill="url(#bg)"/>
+  <text x="48" y="58" class="title">RESEARCH / SIX TECHNOLOGIES</text>
+  <text x="48" y="86" class="sub">Root projects are immediately available; arrows mark implemented prerequisites.</text>
+
+  <text x="90" y="145" class="field">ENERGY</text>
+  <rect x="75" y="165" width="340" height="130" rx="14" class="root"/>
+  <text x="100" y="201" class="name">Solar Efficiency</text><line x1="100" y1="216" x2="390" y2="216" class="rule"/>
+  <text x="100" y="245" class="effect">+15% output from existing solar arrays</text>
+  <path d="M245 295V389" class="edge"/>
+  <rect x="75" y="398" width="340" height="130" rx="14" class="node"/>
+  <text x="100" y="434" class="field">AGRICULTURE</text><text x="100" y="468" class="name">Crop Yield</text>
+  <text x="100" y="501" class="effect">+0.2 greenhouse growth bonus (cap 2.0)</text>
+
+  <text x="470" y="145" class="field">LIFE SUPPORT</text>
+  <rect x="455" y="165" width="340" height="130" rx="14" class="root"/>
+  <text x="480" y="201" class="name">Oxygen Recovery</text><line x1="480" y1="216" x2="770" y2="216" class="rule"/>
+  <text x="480" y="245" class="effect">+15% output from existing generators</text>
+  <path d="M625 295V389" class="edge"/>
+  <rect x="455" y="398" width="340" height="130" rx="14" class="node"/>
+  <text x="480" y="434" class="field">LIFE SUPPORT</text><text x="480" y="468" class="name">Water Recovery</text>
+  <text x="480" y="501" class="effect">+15% output from existing water plants</text>
+
+  <text x="850" y="145" class="field">ENGINEERING</text>
+  <rect x="835" y="165" width="370" height="130" rx="14" class="root"/>
+  <text x="860" y="201" class="name">Robotics</text><line x1="860" y1="216" x2="1180" y2="216" class="rule"/>
+  <text x="860" y="245" class="effect">+10% efficiency for existing robots (cap 2.0)</text>
+  <path d="M1020 295V389" class="edge"/>
+  <rect x="835" y="398" width="370" height="130" rx="14" class="node"/>
+  <text x="860" y="434" class="field">MEDICINE</text><text x="860" y="468" class="name">Medical Care</text>
+  <text x="860" y="501" class="effect">+0.1 medical-bay efficiency (cap 2.0)</text>
+
+  <rect x="75" y="574" width="1130" height="84" rx="12" fill="#30262b" stroke="#584148"/>
+  <text x="102" y="608" class="name">Research requires real colony work</text>
+  <text x="102" y="636" class="effect">Queue a project → assign a scientist → reach an operational lab → consume Science Points → apply the completed upgrade.</text>
+</svg>

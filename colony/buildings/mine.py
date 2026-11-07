@@ -78,8 +78,6 @@ class Mine(BaseBuilding):
 
             return
 
-        self.extract_minerals()
-
         self.update_integrity()
 
     # ========================================================
@@ -103,12 +101,14 @@ class Mine(BaseBuilding):
 
     def extract_minerals(
         self,
+        deposit_available: float = 0.0,
     ) -> float:
 
         if (
             not self.operational
             or self.power.current_amount < self.power_required
             or self.population.current_amount < self.workers_required
+            or deposit_available <= 0.0
         ):
 
             return 0.0
@@ -117,13 +117,13 @@ class Mine(BaseBuilding):
             self.power_required,
         )
 
-        extracted = (
+        extracted = min(deposit_available, (
             self.extraction_rate
             * self.efficiency
             * self.extraction_efficiency
             * (self.equipment_condition / 100.0)
             * (self.ore_quality / 100.0)
-        )
+        ))
 
         produced = self.minerals.generate(
             extracted,

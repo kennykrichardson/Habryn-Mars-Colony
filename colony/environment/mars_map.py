@@ -294,11 +294,14 @@ class MarsMap:
         self,
         building: Any,
         origin: tuple[int, int],
-        width: int = 1,
-        height: int = 1,
+        width: int | None = None,
+        height: int | None = None,
     ) -> bool:
 
         ox, oy = origin
+        default_width, default_height = type(building).default_footprint
+        width = default_width if width is None else width
+        height = default_height if height is None else height
 
         if width <= 0 or height <= 0:
             return False

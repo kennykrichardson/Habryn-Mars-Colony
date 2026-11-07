@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">Habryn roadmap</title>
+  <desc id="desc">The first column shows implemented foundations. Three unscheduled follow-on tracks cover reliability, logistics depth, and colony-system depth, followed by deployment and observability work.</desc>
+  <defs>
+    <linearGradient id="bg" x2="0" y2="1"><stop stop-color="#211a20"/><stop offset="1" stop-color="#302326"/></linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#e09a58"/></marker>
+    <style>
+      text{font-family:Inter,Segoe UI,sans-serif;fill:#f1dfc1}.title{font-size:30px;font-weight:700;letter-spacing:1px}.sub{font-size:15px;fill:#bda58e}.head{font-size:17px;font-weight:700}.body{font-size:13px;fill:#d3c0a9}.tag{font-size:12px;font-weight:700;fill:#6acdd5;letter-spacing:1px}.done{fill:#142c32;stroke:#6acdd5;stroke-width:2}.next{fill:#392b30;stroke:#9b6b50;stroke-width:2}.later{fill:#30262b;stroke:#765b50;stroke-width:2;stroke-dasharray:7 5}.arrow{stroke:#e09a58;stroke-width:3;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect width="1280" height="720" rx="20" fill="url(#bg)"/>
+  <text x="48" y="58" class="title">DEVELOPMENT ROADMAP</text>
+  <text x="48" y="86" class="sub">Delivered foundations and unscheduled follow-on directions. No dates or feature promises implied.</text>
+
+  <rect x="58" y="140" width="260" height="450" rx="16" class="done"/>
+  <text x="84" y="181" class="tag">IMPLEMENTED</text><text x="84" y="219" class="head">Colony foundations</text>
+  <text x="84" y="263" class="body">✓ Seeded scenarios and map</text>
+  <text x="84" y="301" class="body">✓ Agents, facilities, resources</text>
+  <text x="84" y="339" class="body">✓ Tasks and bounded autonomy</text>
+  <text x="84" y="377" class="body">✓ Finite fuel logistics workflow</text>
+  <text x="84" y="415" class="body">✓ Research and save/load</text>
+  <text x="84" y="453" class="body">✓ Terminal and Pygame clients</text>
+  <text x="84" y="491" class="body">✓ High-resolution render presets</text>
+  <text x="84" y="545" class="tag">VERIFIED IN REPOSITORY</text>
+
+  <path d="M318 365H370" class="arrow"/>
+  <rect x="382" y="140" width="375" height="195" rx="16" class="next"/>
+  <text x="410" y="181" class="tag">SUGGESTED / RELIABILITY</text><text x="410" y="220" class="head">Harden long-running colonies</text>
+  <text x="410" y="260" class="body">Long scenario runs · save migrations</text><text x="410" y="287" class="body">delivery interruption · capacity checks</text><text x="410" y="314" class="body">stronger failure and recovery coverage</text>
+
+  <rect x="782" y="140" width="440" height="195" rx="16" class="next"/>
+  <text x="810" y="181" class="tag">SUGGESTED / SYSTEM DEPTH</text><text x="810" y="220" class="head">Broaden supported work loops</text>
+  <text x="810" y="260" class="body">More physical resource deliveries</text><text x="810" y="287" class="body">staffing and manufacturing chains</text><text x="810" y="314" class="body">life-support and recycling detail</text>
+
+  <rect x="382" y="370" width="375" height="195" rx="16" class="later"/>
+  <text x="410" y="411" class="tag">SUGGESTED / DEPLOYMENT</text><text x="410" y="450" class="head">Ship with confidence</text>
+  <text x="410" y="490" class="body">packaging and platform startup checks</text><text x="410" y="517" class="body">target-hardware graphics profiles</text><text x="410" y="544" class="body">reproducible performance reporting</text>
+
+  <rect x="782" y="370" width="440" height="195" rx="16" class="later"/>
+  <text x="810" y="411" class="tag">SUGGESTED / PLAYER EXPERIENCE</text><text x="810" y="450" class="head">Make complex states legible</text>
+  <text x="810" y="490" class="body">facility and equipment inspection</text><text x="810" y="517" class="body">clearer colony planning and alerts</text><text x="810" y="544" class="body">richer scenarios only with tested rules</text>
+
+  <text x="58" y="638" class="sub">Priorities can change. Update this document when implementation or product direction changes.</text>
+</svg>

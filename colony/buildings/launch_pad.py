@@ -56,9 +56,7 @@ class LaunchPad(BaseBuilding):
         default_factory=Power,
     )
 
-    fuel: Fuel = field(
-        default_factory=Fuel,
-    )
+    fuel: Fuel | None = None
 
     population: Population = field(
         default_factory=Population,
@@ -114,6 +112,7 @@ class LaunchPad(BaseBuilding):
         if (
             not self.operational
             or self.power.current_amount < self.power_required
+            or self.fuel is None
             or self.fuel.current_amount < self.fuel_required
         ):
 
@@ -270,6 +269,7 @@ class LaunchPad(BaseBuilding):
         return (
             self.operational
             and self.power.current_amount >= self.power_required
+            and self.fuel is not None
             and self.fuel.current_amount >= self.fuel_required
         )
 
@@ -328,7 +328,7 @@ class LaunchPad(BaseBuilding):
                     2,
                 ),
                 "power": self.power.statistics(),
-                "fuel": self.fuel.statistics(),
+                "fuel": self.fuel.statistics() if self.fuel is not None else None,
                 "population": self.population.statistics(),
             }
         )

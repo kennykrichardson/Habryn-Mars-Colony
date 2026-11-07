@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">Habryn simulation architecture</title>
+  <desc id="desc">A Mars colony configuration initializes a simulation and authoritative model. The model coordinates MarsMap, entities, and systems; snapshots feed the terminal and Pygame presentations, while JSON persistence stores authoritative state.</desc>
+  <defs>
+    <linearGradient id="bg" x2="0" y2="1"><stop stop-color="#211a20"/><stop offset="1" stop-color="#302326"/></linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#e09a58"/></marker>
+    <style>
+      text{font-family:Inter,Segoe UI,sans-serif;fill:#f1dfc1}.title{font-size:30px;font-weight:700;letter-spacing:1px}.sub{font-size:15px;fill:#bda58e}.head{font-size:17px;font-weight:700}.body{font-size:13px;fill:#d3c0a9}.box{fill:#392b30;stroke:#9b6b50;stroke-width:2}.core{fill:#4b3436;stroke:#e09a58;stroke-width:3}.accent{fill:#142c32;stroke:#6acdd5;stroke-width:2}.line{fill:none;stroke:#e09a58;stroke-width:2.5;marker-end:url(#arrow)}.thin{fill:none;stroke:#78979a;stroke-width:2;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect width="1280" height="720" rx="20" fill="url(#bg)"/>
+  <text x="48" y="58" class="title">HABRYN / SIMULATION ARCHITECTURE</text>
+  <text x="48" y="86" class="sub">Authoritative state flows from the model to presentation and persistence boundaries.</text>
+
+  <rect x="55" y="135" width="210" height="86" rx="12" class="box"/>
+  <text x="75" y="169" class="head">ColonyConfig</text><text x="75" y="195" class="body">seed · scenario · supplies</text>
+  <path d="M265 178H315" class="line"/>
+  <rect x="320" y="135" width="205" height="86" rx="12" class="core"/>
+  <text x="342" y="169" class="head">Simulation</text><text x="342" y="195" class="body">lifecycle · clock · save/load</text>
+  <path d="M525 178H578" class="line"/>
+  <rect x="585" y="120" width="300" height="118" rx="14" class="core"/>
+  <text x="610" y="158" class="head">ColonyModel</text><text x="610" y="185" class="body">authoritative entities and updates</text><text x="610" y="209" class="body">manager coordination · snapshots</text>
+  <path d="M885 163H948" class="thin"/>
+  <rect x="955" y="125" width="270" height="91" rx="12" class="box"/>
+  <text x="978" y="160" class="head">WorldSnapshot</text><text x="978" y="188" class="body">read-only Pygame view data</text>
+
+  <path d="M690 238V296H272V340" class="line"/>
+  <path d="M735 238V340" class="line"/>
+  <path d="M780 238V296H1005V340" class="line"/>
+  <path d="M420 221V270H920V340" class="thin"/>
+  <path d="M1080 216V340" class="thin"/>
+
+  <rect x="70" y="345" width="385" height="155" rx="14" class="accent"/>
+  <text x="96" y="382" class="head">MarsMap</text><text x="96" y="414" class="body">one spatial authority</text>
+  <text x="96" y="441" class="body">terrain · deposits · occupancy</text><text x="96" y="468" class="body">building footprints · path queries</text>
+
+  <rect x="475" y="345" width="385" height="155" rx="14" class="box"/>
+  <text x="501" y="382" class="head">Entities and systems</text><text x="501" y="414" class="body">astronauts · robots · facilities</text>
+  <text x="501" y="441" class="body">resources · tasks · logistics</text><text x="501" y="468" class="body">environment · events · research</text>
+
+  <rect x="880" y="345" width="330" height="155" rx="14" class="box"/>
+  <text x="906" y="382" class="head">Presentation clients</text><text x="906" y="414" class="body">terminal reads simulation statistics</text>
+  <text x="906" y="441" class="body">Pygame reads snapshot for pixel-art UI</text><text x="906" y="468" class="body">selection · camera · minimap · controls</text>
+
+  <path d="M420 221V268H1240V610H895" class="line"/>
+  <rect x="385" y="565" width="510" height="91" rx="14" class="box"/>
+  <text x="420" y="601" class="head">JSON persistence</text><text x="420" y="628" class="body">simulation time · managers · entities · map · random state</text>
+  <text x="48" y="686" class="sub">Pygame surfaces, camera state, and animation frames stay outside authoritative saves.</text>
+</svg>

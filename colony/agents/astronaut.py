@@ -20,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
-from .base_agent import BaseAgent, AgentState
+from .base_agent import BaseAgent, AgentState, InventoryItem
 
 # ============================================================
 # EVA Status
@@ -313,6 +313,7 @@ class Astronaut(BaseAgent):
     ) -> "Astronaut":
 
         data = dict(data)
+        inventory_data = data.pop("inventory", {})
         if isinstance(data.get("state"), str):
             data["state"] = AgentState(data["state"])
         if isinstance(data.get("position"), list):
@@ -333,6 +334,10 @@ class Astronaut(BaseAgent):
         astronaut = cls(
             **data,
         )
+
+        astronaut.inventory = {name: InventoryItem(name=name, quantity=values["quantity"],
+                                                   weight=values["weight"])
+                               for name, values in inventory_data.items()}
 
         astronaut.eva_status = eva_status
 

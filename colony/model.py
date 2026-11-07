@@ -17,9 +17,12 @@ from types import MappingProxyType
 from typing import Any
 from collections import deque
 from math import dist
+from heapq import heappop, heappush
+from uuid import uuid4
 
 from colony.environment.mars_map import MarsMap
 from colony.buildings.base_building import BaseBuilding
+from colony.buildings.storage_facility import StorageFacility
 from colony.agents.identity import initialize_character
 from colony.systems.social_manager import SocialManager
 from colony.environment.day_night_cycle import DayNightCycle
@@ -59,7 +62,7 @@ class WorldSnapshot:
     """Read-only render boundary for the authoritative colony world."""
     width: int
     height: int
-    tiles: tuple[tuple[int, int, str, bool, bool, tuple[tuple[str, float], ...]], ...]
+    tiles: tuple[tuple[int, int, str, bool, bool, tuple[tuple[str, float], ...], str], ...]
     agents: tuple[MappingProxyType, ...]
     buildings: tuple[MappingProxyType, ...]
     tick: int
@@ -84,6 +87,8 @@ class ColonyModel:
     colony_id: str = "COLONY-07"
     arrival_schedule: tuple[tuple[int, int, int], ...] = ()
     processed_arrivals: set[int] = field(default_factory=set)
+    discovered_deposits: list[dict[str, Any]] = field(default_factory=list)
+    exploration_reports: list[dict[str, Any]] = field(default_factory=list)
     agents_by_id: dict[Any, Any] = field(default_factory=dict)
     buildings_by_id: dict[Any, Any] = field(default_factory=dict)
     weather: WeatherSystem = field(default_factory=WeatherSystem)
@@ -340,6 +345,32 @@ class ColonyModel:
             if register:
                 register(agent)
 
+    def register_visible_deposits(self) -> None:
+        """Record finite deposits already present in surveyed map cells."""
+        known = {(tuple(item["position"]), item["resource"]): item for item in self.discovered_deposits}
+        for position, tile in self.mars_map.tiles.items():
+            if not tile.explored:
+                continue
+            for resource, amount in sorted(tile.resource_deposit.items()):
+                if amount > 0 and (position, resource) not in known:
+                    self.discovered_deposits.append({"position": list(position), "resource": resource,
+                                                     "remaining": amount,
+                                                     "discovered_tick": self.scheduler.tick})
+                elif (position, resource) in known:
+                    known[(position, resource)]["remaining"] = amount
+        for (position, resource), item in known.items():
+            item["remaining"] = self.mars_map.resource_amount(*position, resource)
+
+    def reveal_area(self, center: tuple[int, int], radius: int = 2) -> int:
+        """Reveal a rover survey area and record resource deposits it finds."""
+        previous = len(self.mars_map.explored_tiles())
+        for y in range(max(0, center[1] - radius), min(self.mars_map.height, center[1] + radius + 1)):
+            for x in range(max(0, center[0] - radius), min(self.mars_map.width, center[0] + radius + 1)):
+                if abs(x - center[0]) + abs(y - center[1]) <= radius:
+                    self.mars_map.explore(x, y)
+        self.register_visible_deposits()
+        return len(self.mars_map.explored_tiles()) - previous
+
     def remove_agent(self, agent_or_id: Any) -> Any:
         key = getattr(agent_or_id, "unique_id", agent_or_id)
         agent = self.agents_by_id.pop(key, None)
@@ -369,10 +400,13 @@ class ColonyModel:
         agent.position = tuple(destination)
         return True
 
-    def place_building(self, building: Any, width: int = 1, height: int = 1) -> bool:
+    def place_building(self, building: Any, width: int | None = None, height: int | None = None) -> bool:
         key = getattr(building, "building_id", id(building))
         if key in self.buildings_by_id:
             raise ValueError(f"Building {key!r} is already registered")
+        default_width, default_height = type(building).default_footprint
+        width = default_width if width is None else width
+        height = default_height if height is None else height
         if not self.mars_map.place_building(building, tuple(building.position), width, height):
             return False
         self.buildings_by_id[key] = building
@@ -387,6 +421,12 @@ class ColonyModel:
                 shared = self.resource_manager.resource(value.name)
                 if shared is not None:
                     setattr(building, attr, shared)
+            elif attr == "fuel" and (type(building).__name__ in {"Reactor", "LaunchPad"}
+                                      or isinstance(building, StorageFacility)):
+                shared = self.resource_manager.resource("Fuel")
+                if shared is None:
+                    raise ValueError("Fuel-using buildings require the colony Fuel inventory")
+                setattr(building, attr, shared)
         self.ai_manager.register_building(building)
         self.maintenance_manager.register_building(building)
         self.logistics_manager.register_building(building)
@@ -422,7 +462,7 @@ class ColonyModel:
 
     def world_snapshot(self) -> WorldSnapshot:
         tiles = tuple((x, y, tile.terrain.name, tile.explored, tile.occupied,
-                       tuple(sorted(tile.resource_deposit.items())))
+                       tuple(sorted(tile.resource_deposit.items())), tile.region)
                       for (x, y), tile in self.mars_map.tiles.items())
         agents = tuple(MappingProxyType({**a.statistics(), "id": key, "name": getattr(a, "name", type(a).__name__),
             "category": "robot" if "robot" in type(a).__name__.lower() else "agent",
@@ -443,12 +483,45 @@ class ColonyModel:
         telemetry["resource_inventory"] = {
             name: resource.statistics() for name, resource in self.resource_manager.resources.items()
         }
+        fuel_resource = self.resource_manager.resource("Fuel")
+        fuel_tasks = [task for task in self.task_manager.tasks
+                      if task.metadata.get("action") == "fuel_harvest"
+                      and task.status not in {TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED}]
+        telemetry["fuel_logistics"] = {
+            "deposit_amount": sum(tile.resource_deposit.get("Fuel", 0.0)
+                                  for tile in self.mars_map.tiles.values()),
+            "in_transit": sum(item.quantity for agent in self.agents_by_id.values()
+                               for name, item in agent.inventory.items() if name == "Fuel"),
+            "consumed_total": float(getattr(fuel_resource, "total_consumed", 0.0)),
+            "active_tasks": [{"name": task.name, "phase": task.metadata.get("phase", "extract"),
+                              "progress": task.progress,
+                              "worker": getattr(task.assigned_agent, "name", None)}
+                             for task in fuel_tasks],
+        }
+        telemetry["exploration_reports"] = [dict(report) for report in self.exploration_reports[-12:]]
+        telemetry["known_deposits"] = [dict(deposit) for deposit in self.discovered_deposits]
+        telemetry["logistics_requests"] = [
+            {"id": item.request_id, "resource": item.resource, "amount": item.amount,
+             "source": item.source if isinstance(item.source, str) else self._entity_reference(item.source),
+             "destination": getattr(item.destination, "name", str(item.destination)),
+             "carrier": getattr(item.assigned_robot, "name", None),
+             "loading_progress": item.loading_progress, "travel_progress": item.travel_progress,
+             "unloading_progress": item.unloading_progress,
+             "status": "completed" if item.completed else "failed" if item.failed else "in transit"
+             if item.assigned_robot is not None else "awaiting assignment"}
+            for item in list(self.logistics_manager.delivery_queue)[-20:]
+        ]
         telemetry["events_feed"] = [event.statistics() for event in self.event_manager.active_events]
         telemetry["social"] = self.social_manager.statistics()
         telemetry["conversations"] = [item.to_dict() for item in self.social_manager.conversations[-12:]]
         telemetry["active_conversations"] = [item.to_dict() for item in self.social_manager.conversations
                                               if item.active]
         telemetry["warnings"] = sorted(self.resource_manager.shortages)
+        telemetry["ai_goals"] = [dict(goal) for goal in self.ai_manager.goals]
+        telemetry["ai_decisions"] = [dict(decision) for decision in self.ai_manager.decisions[-12:]]
+        telemetry["resource_forecasts"] = {
+            name: dict(forecast) for name, forecast in self.ai_manager.resource_forecasts.items()
+        }
         telemetry["construction_projects"] = [
             {"name": project.building_name, "position": project.position, "progress": project.progress,
              "status": "Active" if project in self.construction_manager.active_projects else "Queued",
@@ -473,17 +546,33 @@ class ColonyModel:
     # ========================================================
 
     def _path_for(self, start: tuple[int, int], goal: tuple[int, int]) -> list[tuple[int, int]]:
-        queue = deque([(start, [])])
-        visited = {start}
-        while queue:
-            position, path = queue.popleft()
+        if start == goal:
+            return []
+        frontier = []
+        heappush(frontier, (0.0, 0.0, start))
+        parent: dict[tuple[int, int], tuple[int, int] | None] = {start: None}
+        cost_so_far = {start: 0.0}
+        while frontier:
+            _priority, cost, position = heappop(frontier)
             if position == goal:
-                return path
+                path = []
+                cursor = goal
+                while cursor != start:
+                    path.append(cursor)
+                    cursor = parent[cursor]
+                return list(reversed(path))
+            if cost > cost_so_far.get(position, float("inf")):
+                continue
             for tile in self.mars_map.walkable_neighbors(*position):
-                nxt = (tile.x, tile.y)
-                if nxt not in visited:
-                    visited.add(nxt)
-                    queue.append((nxt, [*path, nxt]))
+                next_position = (tile.x, tile.y)
+                step_cost = max(0.1, float(tile.terrain.movement_cost))
+                next_cost = cost + step_cost
+                if next_cost >= cost_so_far.get(next_position, float("inf")):
+                    continue
+                cost_so_far[next_position] = next_cost
+                parent[next_position] = position
+                heuristic = abs(goal[0] - tile.x) + abs(goal[1] - tile.y)
+                heappush(frontier, (next_cost + heuristic, next_cost, next_position))
         return []
 
     def move_agent_to(self, agent_or_id: Any, destination: tuple[int, int]) -> bool:
@@ -514,9 +603,7 @@ class ColonyModel:
         building_class = getattr(module, building_name, None)
         if building_class is None or not isinstance(building_class, type) or not issubclass(building_class, BaseBuilding):
             raise ValueError(f"Unknown building type: {building_name}")
-        footprint = (2, 2) if building_name in {"Habitat", "SolarArray", "Reactor", "Greenhouse",
-                    "Laboratory", "MedicalBay", "Mine", "Workshop", "StorageFacility",
-                    "RecyclingPlant", "CommunicationsCenter", "LaunchPad"} else (1, 1)
+        footprint = building_class.default_footprint
         x, y = tuple(position)
         footprint_tiles = []
         for dy in range(footprint[1]):
@@ -527,9 +614,11 @@ class ColonyModel:
                 footprint_tiles.append((x + dx, y + dy))
         projects = list(self.construction_manager.construction_queue) + list(self.construction_manager.active_projects)
         for project in projects:
-            other_size = (2, 2) if project.building_name in {"Habitat", "SolarArray", "Reactor", "Greenhouse",
-                         "Laboratory", "MedicalBay", "Mine", "Workshop", "StorageFacility",
-                         "RecyclingPlant", "CommunicationsCenter", "LaunchPad"} else (1, 1)
+            other_module = importlib.import_module(
+                f"colony.buildings.{re.sub(r'(?<!^)(?=[A-Z])', '_', project.building_name).lower()}"
+            )
+            other_class = getattr(other_module, project.building_name)
+            other_size = project.footprint or other_class.default_footprint
             ox, oy = project.position
             if any(ox <= tx < ox + other_size[0] and oy <= ty < oy + other_size[1]
                    for tx, ty in footprint_tiles):
@@ -543,8 +632,63 @@ class ColonyModel:
         project.footprint = footprint
         return project
 
+    def create_fuel_harvest_task(self, deposit_position: tuple[int, int], amount: float,
+                                 storage_building: Any | None = None):
+        """Create a real mine, carry and deliver task against finite map fuel."""
+        tile = self.mars_map.get_tile(*deposit_position)
+        fuel = self.resource_manager.resource("Fuel")
+        tasks = tuple(self.task_manager.tasks)
+        reserved_at_site = sum(float(task.metadata.get("amount", 0.0))
+                               for task in tasks if task.metadata.get("action") == "fuel_harvest"
+                               and task.metadata.get("phase") == "extract"
+                               and tuple(task.metadata.get("deposit", ())) == tuple(deposit_position))
+        reserved_capacity = sum(float(task.metadata.get("amount", 0.0))
+                                for task in tasks if task.metadata.get("action") == "fuel_harvest")
+        if (tile is None or amount <= 0
+                or tile.resource_deposit.get("Fuel", 0.0) - reserved_at_site < amount):
+            raise ValueError("The selected finite fuel deposit cannot supply that amount")
+        if fuel is None or fuel.storage_capacity - fuel.current_amount - reserved_capacity < amount:
+            raise ValueError("Colony fuel storage cannot accept that amount")
+        if storage_building is None:
+            storage_building = next((item for item in self.buildings_by_id.values()
+                                     if type(item).__name__ == "FuelDepot"), None)
+        if storage_building is None:
+            storage_building = next((item for item in self.buildings_by_id.values()
+                                     if isinstance(item, StorageFacility)
+                                     and item.accepts_resource("Fuel")), None)
+        if (storage_building is None or storage_building.building_id not in self.buildings_by_id
+                or not storage_building.operational):
+            raise ValueError("Fuel delivery requires a registered, operational Fuel Depot")
+        if not storage_building.accepts_resource("Fuel"):
+            raise ValueError("The selected storage facility does not accept Fuel")
+        maximum_stock = storage_building.maximum_stock or fuel.storage_capacity
+        if fuel.current_amount + reserved_capacity + amount > maximum_stock:
+            raise ValueError("The Fuel Depot's maximum stock would be exceeded")
+        delivery_entry = self._building_entry(storage_building, tuple(deposit_position))
+        if (not tile.walkable or delivery_entry is None
+                or not self._path_for(tuple(deposit_position), delivery_entry)):
+            raise ValueError("The mapped deposit has no walkable route to colony storage")
+        task = self.task_manager.create_task(
+            name="Harvest and deliver fuel",
+            description=f"Extract {amount:g} L from the mapped deposit and carry it to colony storage.",
+            priority=TaskPriority.HIGH, duration=1)
+        task.task_id = f"fuel-harvest-{self.scheduler.tick}-{deposit_position[0]}-{deposit_position[1]}"
+        task.target = storage_building
+        task.location = tuple(deposit_position)
+        task.required_skills = {"engineering": 1}
+        request = self.logistics_manager.create_request(
+            "Fuel", float(amount), f"MarsMap deposit {deposit_position}", storage_building,
+            priority=5)
+        request.request_id = f"transport-{task.task_id}"
+        task.metadata = {"action": "fuel_harvest", "phase": "extract",
+                         "amount": float(amount), "deposit": list(deposit_position),
+                         "storage_building_id": storage_building.building_id,
+                         "logistics_request_id": request.request_id}
+        return task
+
     def step_agents_and_tasks(self) -> None:
         self._assign_emergency_tasks()
+        self._assign_rover_recovery_tasks()
         self._assign_construction_projects()
         pending = self.task_manager.pending_tasks()
         hour = self.scheduler.hour
@@ -559,6 +703,17 @@ class ColonyModel:
                     self.population_manager.update_housing()
                     agent.metadata["population_removed"] = True
                 agent.current_activity = "Dead"
+                continue
+            if hasattr(agent, "battery_level") and agent.battery_level <= 0.0:
+                if agent.current_task is not None:
+                    stranded_task = agent.current_task
+                    self.task_manager.unassign_task(agent)
+                    if stranded_task not in pending:
+                        pending.append(stranded_task)
+                agent.current_activity = "Stranded — battery depleted"
+                agent.decision_reason = "The rover is offline and requires a recovery or charging crew."
+                agent.moving = False
+                agent.path.clear()
                 continue
             if not self.autonomy_manager.enabled and not getattr(agent, "busy", False):
                 agent.current_activity = "Autonomy disabled"
@@ -620,6 +775,11 @@ class ColonyModel:
                     }.get(task_action, "Working")
                     for resource, amount in task.required_resources.items():
                         self.resource_manager.consume(resource, amount)
+                    if task.metadata.get("action") == "maintenance":
+                        request = next((item for item in self.maintenance_manager.pending_requests()
+                                        if item.building is task.target and item.assigned_agent is None), None)
+                        if request is not None:
+                            self.maintenance_manager.assign_request(agent, request)
                     if task.location is not None:
                         self.move_agent_to(agent, task.location)
                 else:
@@ -653,6 +813,165 @@ class ColonyModel:
                 if project is not None:
                     project.progress = task.progress
                 if task.status == TaskStatus.COMPLETED:
+                    action = task.metadata.get("action")
+                    if action == "fuel_harvest" and task.metadata.get("phase") == "extract":
+                        amount = float(task.metadata["amount"])
+                        deposit = tuple(task.metadata["deposit"])
+                        storage = self.buildings_by_id.get(task.metadata["storage_building_id"])
+                        tile = self.mars_map.get_tile(*deposit)
+                        available = tile.resource_deposit.get("Fuel", 0.0) if tile is not None else 0.0
+                        loaded = available >= amount and agent.add_item("Fuel", amount, weight=1.0)
+                        extracted = loaded and self.mars_map.remove_resource(*deposit, "Fuel", amount) >= amount
+                        if extracted:
+                            self.register_visible_deposits()
+                        if not loaded or not extracted or storage is None:
+                            if loaded:
+                                agent.remove_item("Fuel", amount)
+                            self.task_manager.fail_task(agent)
+                            request = next((item for item in self.logistics_manager.delivery_queue
+                                            if item.request_id == task.metadata.get("logistics_request_id")), None)
+                            if request is not None:
+                                self.logistics_manager.fail_request(request)
+                            agent.current_activity = "Fuel harvest blocked"
+                            agent.decision_reason = "Cargo, deposit, or storage became unavailable before extraction."
+                            agent.employment_status = "Available"
+                            continue
+                        task.metadata["phase"] = "deliver"
+                        task.metadata["loaded_amount"] = amount
+                        task.metadata["loaded_tick"] = self.scheduler.tick
+                        task.metadata["source"] = {"type": "MarsMap deposit", "resource": "Fuel",
+                                                    "position": list(deposit)}
+                        task.metadata["destination"] = {"type": type(storage).__name__,
+                                                         "building_id": storage.building_id}
+                        request = next((item for item in self.logistics_manager.delivery_queue
+                                        if item.request_id == task.metadata.get("logistics_request_id")), None)
+                        if request is None:
+                            raise RuntimeError("Fuel task lost its reserved logistics request")
+                        request.assigned_robot = agent
+                        request.loading_progress = 100.0
+                        task.progress = 0.0
+                        task.status = TaskStatus.IN_PROGRESS
+                        task.location = self._building_entry(storage, tuple(agent.position))
+                        if task.location is None:
+                            self.mars_map.add_resource(*deposit, "Fuel", amount)
+                            agent.remove_item("Fuel", amount)
+                            request = next((item for item in self.logistics_manager.delivery_queue
+                                            if item.request_id == task.metadata.get("logistics_request_id")), None)
+                            if request is not None:
+                                self.logistics_manager.fail_request(request)
+                            self.task_manager.fail_task(agent)
+                            continue
+                        agent.current_activity = "Transporting Fuel"
+                        agent.decision_reason = f"Carrying {amount:g} L of extracted fuel to colony storage."
+                        self.move_agent_to(agent, task.location)
+                        task.metadata["delivery_route_length"] = len(agent.path)
+                        continue
+                    if action == "fuel_harvest" and task.metadata.get("phase") == "deliver":
+                        amount = float(task.metadata["amount"])
+                        fuel = self.resource_manager.resource("Fuel")
+                        storage = self.buildings_by_id.get(task.metadata["storage_building_id"])
+                        if (fuel is None or storage is None or not storage.operational
+                                or not storage.accepts_resource("Fuel") or storage.fuel is not fuel
+                                or not agent.has_item("Fuel", amount)):
+                            request = next((item for item in self.logistics_manager.delivery_queue
+                                            if item.request_id == task.metadata.get("logistics_request_id")), None)
+                            if request is not None:
+                                self.logistics_manager.fail_request(request)
+                            self.task_manager.fail_task(agent)
+                            agent.employment_status = "Available"
+                            continue
+                        before = fuel.current_amount
+                        if not self.resource_manager.produce("Fuel", amount):
+                            request = next((item for item in self.logistics_manager.delivery_queue
+                                            if item.request_id == task.metadata.get("logistics_request_id")), None)
+                            if request is not None:
+                                self.logistics_manager.fail_request(request)
+                            self.task_manager.fail_task(agent)
+                            agent.employment_status = "Available"
+                            continue
+                        accepted = fuel.current_amount - before
+                        if accepted != amount:
+                            # create_fuel_harvest_task reserves capacity up front; this
+                            # guard prevents cargo disappearing if state changed meanwhile.
+                            fuel.consume(accepted)
+                            self.resource_manager.production_history["Fuel"] -= accepted
+                            self.task_manager.fail_task(agent)
+                            request = next((item for item in self.logistics_manager.delivery_queue
+                                            if item.request_id == task.metadata.get("logistics_request_id")), None)
+                            if request is not None:
+                                self.logistics_manager.fail_request(request)
+                            agent.employment_status = "Available"
+                            continue
+                        agent.remove_item("Fuel", amount)
+                        storage.total_resources_transferred += amount
+                        self.resource_manager.transfer("Fuel", amount)
+                        request = next((item for item in self.logistics_manager.delivery_queue
+                                        if item.request_id == task.metadata.get("logistics_request_id")), None)
+                        if request is None:
+                            raise RuntimeError("Delivered Fuel has no logistics manifest")
+                        request.unloading_progress = 100.0
+                        self.logistics_manager.complete_request(request)
+                        task.metadata["delivered_amount"] = accepted
+                        task.metadata["delivered_tick"] = self.scheduler.tick
+                        task.metadata["transfer_event"] = {
+                            "resource": "Fuel", "quantity": accepted,
+                            "source": dict(task.metadata["source"]),
+                            "destination": dict(task.metadata["destination"]),
+                            "completed_tick": self.scheduler.tick,
+                        }
+                    if action == "explore":
+                        revealed = self.reveal_area(tuple(task.location), int(task.metadata.get("radius", 2)))
+                        if hasattr(agent, "consume_battery"):
+                            agent.consume_battery(float(task.metadata.get("work_energy", 2.0)))
+                            agent.durability = max(0.0, agent.durability - .05)
+                        report = {"tick": self.scheduler.tick, "rover_id": agent.unique_id,
+                                  "rover": agent.name, "position": list(task.location),
+                                  "tiles_revealed": revealed,
+                                  "deposits": [dict(item) for item in self.discovered_deposits
+                                               if abs(item["position"][0] - task.location[0])
+                                               + abs(item["position"][1] - task.location[1])
+                                               <= int(task.metadata.get("radius", 2))]}
+                        self.exploration_reports.append(report)
+                        self.exploration_reports[:] = self.exploration_reports[-500:]
+                    if action == "recover_rover":
+                        rover = task.target
+                        recovery_cost = float(task.metadata.get("power_cost", 10.0))
+                        if (rover is None or getattr(rover, "battery_level", 1.0) > 0.0
+                                or not self.resource_manager.consume("Power", recovery_cost)):
+                            self.task_manager.fail_task(agent)
+                            agent.current_activity = "Rover recovery blocked"
+                            agent.decision_reason = "A stranded rover needs a reachable engineer and ten units of power."
+                            agent.employment_status = "Available"
+                            continue
+                        rover.recharge(float(task.metadata.get("charge_amount", 25.0)))
+                        if rover.battery_level < 20.0:
+                            self.task_manager.fail_task(agent)
+                            agent.employment_status = "Available"
+                            continue
+                        task.metadata["recovered_tick"] = self.scheduler.tick
+                        task.metadata["power_consumed"] = recovery_cost
+                    if action == "farm_water":
+                        water_cost = float(task.metadata.get("water_cost", 2.0))
+                        farmer = hasattr(agent, "water") and hasattr(agent, "assign_greenhouse")
+                        watered = (farmer and task.target is not None
+                                   and self.resource_manager.consume("Water", water_cost))
+                        if watered:
+                            agent.assign_greenhouse(task.target)
+                            watered = agent.water()
+                        if not watered:
+                            self.task_manager.fail_task(agent)
+                            agent.current_activity = "Work blocked"
+                            agent.decision_reason = "Greenhouse care could not complete: farmer, target, or water unavailable."
+                            agent.employment_status = "Available"
+                            continue
+                    elif action == "maintenance" and task.target is not None:
+                        if hasattr(agent, "maintain"):
+                            agent.maintain(task.target)
+                        request = next((item for item in self.maintenance_manager.maintenance_queue
+                                        if item.building is task.target and item.assigned_agent is agent), None)
+                        if request is not None:
+                            self.maintenance_manager.complete_request(request)
+                            self.maintenance_manager.maintenance_queue.remove(request)
                     if project is not None:
                         if not self._complete_construction(project, agent):
                             for name, amount in project.required_resources.items():
@@ -761,13 +1080,48 @@ class ColonyModel:
                 if action == "medical" and hasattr(responder, "current_patient"):
                     responder.current_patient = target
 
-    def _building_entry(self, building: Any) -> tuple[int, int] | None:
+    def _assign_rover_recovery_tasks(self) -> None:
+        """Send an engineer with finite colony power to physically restart a rover."""
+        existing = {(task.metadata.get("rover_id")) for task in self.task_manager.tasks
+                    if task.metadata.get("action") == "recover_rover"}
+        for rover in self.agents_by_id.values():
+            if not hasattr(rover, "battery_level") or rover.battery_level > 0 or rover.unique_id in existing:
+                continue
+            responders = [agent for agent in self.agents_by_id.values()
+                          if hasattr(agent, "suit_oxygen") and agent.alive and not agent.busy
+                          and agent.skill_levels.get("engineering", 0) >= 1]
+            candidates = []
+            for neighbor in self.mars_map.neighbors(*rover.position):
+                if not neighbor.walkable:
+                    continue
+                for engineer in responders:
+                    path = self._path_for(tuple(engineer.position), (neighbor.x, neighbor.y))
+                    if path or tuple(engineer.position) == (neighbor.x, neighbor.y):
+                        candidates.append((len(path), engineer.unique_id, (neighbor.x, neighbor.y)))
+            if not candidates:
+                continue
+            _distance, _engineer_id, location = min(candidates)
+            task = self.task_manager.create_task(
+                name=f"Recover {rover.name}",
+                description="Travel to the stranded rover and consume colony power to restart it.",
+                priority=TaskPriority.CRITICAL, duration=2)
+            task.target = rover
+            task.location = location
+            task.required_skills = {"engineering": 1}
+            task.metadata = {"action": "recover_rover", "rover_id": rover.unique_id,
+                             "power_cost": 10.0, "charge_amount": 25.0}
+            existing.add(rover.unique_id)
+
+    def _building_entry(self, building: Any, from_position: tuple[int, int] | None = None) -> tuple[int, int] | None:
         candidates = set()
         for tile in self.mars_map.tiles.values():
             if tile.building is building:
                 candidates.update((neighbor.x, neighbor.y)
                                   for neighbor in self.mars_map.walkable_neighbors(tile.x, tile.y))
-        return min(candidates, key=lambda point: (point[0], point[1]), default=None)
+        origin = tuple(from_position or building.position)
+        return min(candidates, key=lambda point: (abs(point[0] - origin[0])
+                                                   + abs(point[1] - origin[1]), point[1], point[0]),
+                   default=None)
 
     def _resolve_agent_emergency(self, agent: Any, target: Any) -> None:
         for emergency in tuple(self.emergency_manager.active_emergencies):
@@ -881,10 +1235,30 @@ class ColonyModel:
     def _advance_agent_movement(self, agent: Any) -> None:
         if agent.moving and agent.path:
             source, destination = tuple(agent.position), tuple(agent.path[0])
+            if hasattr(agent, "battery_level"):
+                tile = self.mars_map.get_tile(*destination)
+                cargo_penalty = min(.5, getattr(agent, "carrying_weight", 0.0) * .005)
+                energy = .12 * max(.5, float(tile.terrain.movement_cost if tile is not None else 1.0)) + cargo_penalty
+                if agent.battery_level < energy:
+                    agent.consume_battery(agent.battery_level)
+                    agent.moving = False
+                    agent.path.clear()
+                    return
             if self.mars_map.move_agent(agent, source, destination):
                 agent.position = destination
                 agent.path.pop(0)
                 agent.distance_travelled += dist(source, destination)
+                if hasattr(agent, "consume_battery"):
+                    agent.consume_battery(energy)
+                task = getattr(agent, "current_task", None)
+                request_id = task.metadata.get("logistics_request_id") if task is not None else None
+                if request_id:
+                    request = next((item for item in self.logistics_manager.delivery_queue
+                                    if item.request_id == request_id), None)
+                    if request is not None and task.metadata.get("phase") == "deliver":
+                        route_length = max(1, int(task.metadata.get("delivery_route_length", 0)))
+                        request.travel_progress = min(100.0,
+                                                      100.0 * (route_length - len(agent.path)) / route_length)
                 if not agent.path:
                     agent.stop()
 
@@ -1012,6 +1386,10 @@ class ColonyModel:
         self.power_grid.hourly_update()
         for building in others:
             building.hourly_update()
+            if type(building).__name__ == "Mine":
+                self._operate_mine(building)
+            elif type(building).__name__ == "WaterPlant":
+                self._operate_water_plant(building)
         for agent in self.agents_by_id.values():
             if not getattr(agent, "alive", True):
                 continue
@@ -1102,6 +1480,40 @@ class ColonyModel:
         for manager in self.managers:
 
             manager.hourly_update()
+
+        if self.autonomy_manager.enabled:
+            self.ai_manager.assess_and_plan(self)
+
+    def _operate_mine(self, mine: Any) -> float:
+        """Extract only finite ore currently present in MarsMap deposits."""
+        return self._operate_deposit_processor(mine, "Minerals", "extract_minerals")
+
+    def _operate_water_plant(self, plant: Any) -> float:
+        """Produce water only by processing finite mapped water deposits."""
+        return self._operate_deposit_processor(plant, "Water", "generate_water")
+
+    def _operate_deposit_processor(self, building: Any, resource_name: str, operation: str) -> float:
+        position = building.metadata.get(f"{resource_name.lower()}_deposit_position")
+        if position is not None:
+            position = tuple(position)
+        tile = self.mars_map.get_tile(*position) if position is not None else None
+        if tile is None or tile.resource_deposit.get(resource_name, 0.0) <= 0.0:
+            candidates = [(abs(x - building.position[0]) + abs(y - building.position[1]), y, x, candidate)
+                         for (x, y), candidate in self.mars_map.tiles.items()
+                         if candidate.resource_deposit.get(resource_name, 0.0) > 0.0]
+            if not candidates:
+                building.metadata.pop(f"{resource_name.lower()}_deposit_position", None)
+                return 0.0
+            _distance, y, x, tile = min(candidates, key=lambda item: (item[0], item[1], item[2]))
+            position = (x, y)
+            building.metadata[f"{resource_name.lower()}_deposit_position"] = list(position)
+        available = tile.resource_deposit.get(resource_name, 0.0)
+        produced = getattr(building, operation)(available)
+        if produced > 0.0:
+            depleted = self.mars_map.remove_resource(*position, resource_name, produced)
+            if depleted < produced:
+                raise RuntimeError(f"{type(building).__name__} produced more {resource_name} than its deposit contained")
+        return produced
 
     def _service_research(self) -> None:
         """Assign queued research to real scientists and advance only at a lab."""
@@ -1421,6 +1833,8 @@ class ColonyModel:
             "colony_id": self.colony_id,
             "arrival_schedule": self.arrival_schedule,
             "processed_arrivals": sorted(self.processed_arrivals),
+            "discovered_deposits": [dict(item) for item in self.discovered_deposits],
+            "exploration_reports": [dict(item) for item in self.exploration_reports],
             "agents": [self._serialize_agent(a) for a in self.agents_by_id.values()],
             "buildings": [{"class": type(b).__module__ + "." + type(b).__name__, "data": self._serialize_building(b),
                            "footprint": (max((t.local_x for t in self.mars_map.tiles.values() if t.building is b), default=0) + 1,
@@ -1448,7 +1862,7 @@ class ColonyModel:
                 elif isinstance(value, (list, tuple, set)) and all(
                     isinstance(item, (str, int, float, bool, type(None))) for item in value
                 ):
-                    values[attr] = list(value)
+                    values[attr] = sorted(value, key=str) if isinstance(value, set) else list(value)
             result[name] = values
         result["resource_manager"] = self.resource_manager.serialize()
         result["event_manager"] = self.event_manager.serialize()
@@ -1465,7 +1879,13 @@ class ColonyModel:
         })
         result["ai_manager"].update({"alert_level": self.ai_manager.alert_level.value,
             "colony_score": self.ai_manager.colony_score,
-            "recommendations": list(self.ai_manager.recommendations)})
+            "recommendations": list(self.ai_manager.recommendations),
+            "last_resource_amounts": dict(self.ai_manager.last_resource_amounts),
+            "resource_forecasts": deepcopy(self.ai_manager.resource_forecasts),
+            "goals": deepcopy(self.ai_manager.goals),
+            "decisions": deepcopy(self.ai_manager.decisions),
+            "planning_interval_hours": self.ai_manager.planning_interval_hours,
+            "last_planning_tick": self.ai_manager.last_planning_tick})
         result["population_manager"].pop("population", None)
         result["construction_manager"].update({
             "construction_queue": [self._serialize_construction(p) for p in self.construction_manager.construction_queue],
@@ -1482,7 +1902,10 @@ class ColonyModel:
             {"resource": req.resource, "amount": req.amount, "priority": req.priority,
              "completed": req.completed, "source": self._entity_reference(req.source),
              "destination": self._entity_reference(req.destination),
-             "assigned_robot": getattr(req.assigned_robot, "unique_id", None)}
+             "assigned_robot": getattr(req.assigned_robot, "unique_id", None),
+             "request_id": req.request_id, "loading_progress": req.loading_progress,
+             "travel_progress": req.travel_progress, "unloading_progress": req.unloading_progress,
+             "failed": req.failed}
             for req in self.logistics_manager.delivery_queue]
         result["emergency_manager"].update({
             "emergency_queue": [self._serialize_emergency(e) for e in self.emergency_manager.emergency_queue],
@@ -1515,6 +1938,7 @@ class ColonyModel:
                 "required_points": project.required_points, "progress": project.progress,
                 "priority": project.priority, "completed": project.completed,
                 "unlocked": project.unlocked,
+                "category": project.category, "prerequisites": project.prerequisites,
                 "assigned_scientist": getattr(project.assigned_scientist, "unique_id", None)}
 
     def _serialize_emergency(self, emergency):
@@ -1535,6 +1959,8 @@ class ColonyModel:
         self.colony_id = data.get("colony_id", self.colony_id)
         self.arrival_schedule = tuple(tuple(item) for item in data.get("arrival_schedule", ()))
         self.processed_arrivals = set(data.get("processed_arrivals", ()))
+        self.discovered_deposits = [dict(item) for item in data.get("discovered_deposits", ())]
+        self.exploration_reports = [dict(item) for item in data.get("exploration_reports", ())]
         if data.get("weather"):
             self.weather = WeatherSystem.deserialize(data["weather"])
         if data.get("day_night"):
@@ -1588,7 +2014,7 @@ class ColonyModel:
                     resource_class = self._saved_class(value["$resource"])
                     building_data[attr] = resource_class.deserialize(value["data"])
             building = cls.deserialize(building_data)
-            if not self.place_building(building, *item.get("footprint", (1, 1))):
+            if not self.place_building(building, *item.get("footprint", cls.default_footprint)):
                 raise ValueError(f"Saved building {building!r} cannot be restored")
         self._restoring_entities = False
         saved_managers = data.get("managers", data)
@@ -1632,6 +2058,7 @@ class ColonyModel:
             if name in saved_managers:
                 self._restore_manager_scalars(manager, saved_managers[name])
         self.connect_managers()
+        self.register_visible_deposits()
 
     def _serialize_agent(self, agent: Any) -> dict:
         data = {}
@@ -1749,7 +2176,10 @@ class ColonyModel:
                     manager.delivery_queue.append(TransportRequest(
                         request["resource"], request["amount"], self._resolve_entity(request.get("source")),
                         self._resolve_entity(request.get("destination")), request.get("priority", 1),
-                        self.agents_by_id.get(request.get("assigned_robot")), request.get("completed", False)))
+                        self.agents_by_id.get(request.get("assigned_robot")), request.get("completed", False),
+                        request.get("request_id", str(uuid4())), request.get("loading_progress", 0.0),
+                        request.get("travel_progress", 0.0), request.get("unloading_progress", 0.0),
+                        request.get("failed", False)))
             elif key == "emergency_manager":
                 manager = self.emergency_manager
                 self._restore_manager_scalars(manager, manager_data)
@@ -1779,7 +2209,8 @@ class ColonyModel:
         return ResearchProject(values["name"], values.get("description", ""),
             values.get("required_points", 0.0), values.get("progress", 0.0),
             values.get("priority", 1), self.agents_by_id.get(values.get("assigned_scientist")),
-            values.get("completed", False), values.get("unlocked", False))
+            values.get("completed", False), values.get("unlocked", False),
+            values.get("category", "General"), tuple(values.get("prerequisites", ())))
 
     def _load_emergency(self, values):
         return Emergency(values["title"], values.get("description", ""),
@@ -1805,7 +2236,7 @@ class ColonyModel:
     @staticmethod
     def _manager_names() -> tuple[str, ...]:
         return ("event_manager", "accident_manager", "failure_manager", "random_event_manager",
-                "resource_manager", "power_grid", "population_manager", "construction_manager",
+                "power_grid", "resource_manager", "population_manager", "construction_manager",
                 "logistics_manager", "research_manager", "economy_manager", "emergency_manager",
                 "maintenance_manager", "ai_manager", "autonomy_manager", "social_manager", "task_manager")
 

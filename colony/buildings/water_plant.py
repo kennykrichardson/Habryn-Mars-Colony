@@ -47,7 +47,7 @@ class WaterPlant(BaseBuilding):
 
     power_required: float = 10.0
 
-    water_output: float = 40.0
+    water_output: float = 50.0
 
     water: Water = field(
         default_factory=Water,
@@ -73,8 +73,6 @@ class WaterPlant(BaseBuilding):
 
             return
 
-        self.generate_water()
-
         self.update_integrity()
 
     # ========================================================
@@ -93,9 +91,11 @@ class WaterPlant(BaseBuilding):
 
     def generate_water(
         self,
+        deposit_available: float = 0.0,
     ) -> float:
 
-        if not self.operational or self.power.current_amount < self.power_required:
+        if (not self.operational or self.power.current_amount < self.power_required
+                or deposit_available <= 0.0):
 
             return 0.0
 
@@ -103,7 +103,7 @@ class WaterPlant(BaseBuilding):
             self.power_required,
         )
 
-        generated = self.water_output * self.efficiency
+        generated = min(deposit_available, self.water_output * self.efficiency)
 
         produced = self.water.generate(
             generated,

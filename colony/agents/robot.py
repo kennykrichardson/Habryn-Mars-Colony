@@ -25,7 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
-from .base_agent import BaseAgent, AgentState
+from .base_agent import BaseAgent, AgentState, InventoryItem
 
 # ============================================================
 # Robot Status
@@ -52,6 +52,8 @@ class RobotStatus(Enum):
 
 @dataclass
 class Robot(BaseAgent):
+
+    role: str = "general"
 
     model: str = "MK-I"
 
@@ -83,7 +85,8 @@ class Robot(BaseAgent):
 
         super().__post_init__()
 
-        self.profession = "Robot"
+        self.profession = (self.role.replace("_", " ").title()
+                           if self.role != "general" else "Robot")
 
         self.hunger = 0.0
 
@@ -330,6 +333,7 @@ class Robot(BaseAgent):
     ) -> "Robot":
 
         data = dict(data)
+        inventory_data = data.pop("inventory", {})
         if isinstance(data.get("state"), str):
             data["state"] = AgentState(data["state"])
         if isinstance(data.get("position"), list):
@@ -348,6 +352,10 @@ class Robot(BaseAgent):
         robot = cls(
             **data,
         )
+
+        robot.inventory = {name: InventoryItem(name=name, quantity=values["quantity"],
+                                                weight=values["weight"])
+                           for name, values in inventory_data.items()}
 
         robot.robot_status = robot_status
 

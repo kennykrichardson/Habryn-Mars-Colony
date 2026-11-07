@@ -62,6 +62,9 @@ class AutonomyManager(BaseManager):
         return ActivityDecision("available", "Between scheduled activities.", "Next scheduled activity")
 
     def score_task(self, agent, task, distance: float, hour: int) -> tuple[float, str]:
+        required_role = task.metadata.get("required_role")
+        if required_role and getattr(agent, "role", None) != required_role:
+            return -inf, "Task requires a different rover specialization."
         skills = getattr(agent, "skill_levels", {})
         required = getattr(task, "required_skills", {})
         if any(skills.get(skill, 0) < level for skill, level in required.items()):

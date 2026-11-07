@@ -20,6 +20,7 @@ from colony.resources.food import Food
 from colony.resources.water import Water
 from colony.resources.power import Power
 from colony.resources.heat import Heat
+from colony.resources.oxygen import Oxygen
 
 # ============================================================
 # Greenhouse
@@ -49,6 +50,14 @@ class Greenhouse(BaseBuilding):
 
     crop_health: float = 100.0
 
+    crop_stage: str = "Mature"
+
+    crop_stage_hours: int = 0
+
+    crop_cycles_completed: int = 0
+
+    photosynthesis_oxygen_ratio: float = 1.0
+
     growth_bonus: float = 1.0
 
     food: Food = field(
@@ -66,6 +75,8 @@ class Greenhouse(BaseBuilding):
     heat: Heat = field(
         default_factory=Heat,
     )
+
+    oxygen: Oxygen = field(default_factory=Oxygen)
 
     total_food_produced: float = 0.0
 
@@ -110,13 +121,14 @@ class Greenhouse(BaseBuilding):
         self,
     ) -> float:
 
-        if (
-            not self.operational
-            or self.water.current_amount < self.water_consumption
-            or self.power.current_amount < self.power_required
-            or self.heat.current_amount < self.heat_consumption
-        ):
+        if not self.operational:
 
+            return 0.0
+
+        if (self.water.current_amount < self.water_consumption
+                or self.power.current_amount < self.power_required
+                or self.heat.current_amount < self.heat_consumption):
+            self.crop_health = max(0.0, self.crop_health - 1.0)
             return 0.0
 
         self.water.consume(
@@ -131,16 +143,22 @@ class Greenhouse(BaseBuilding):
             self.heat_consumption,
         )
 
-        generated = (
-            self.food_output
-            * self.efficiency
-            * self.growth_bonus
-            * (self.crop_health / 100.0)
-        )
+        if self.crop_stage != "Mature":
+            self.crop_stage_hours += 1
+            stages = ("Seedling", "Vegetative", "Flowering", "Mature")
+            current = stages.index(self.crop_stage)
+            self.crop_stage = stages[min(current + 1, len(stages) - 1)]
+            self.crop_stage_hours = 0
+            return 0.0
 
-        produced = self.food.generate(
-            generated,
-        )
+        generated = (self.food_output * self.efficiency * self.growth_bonus
+                     * (self.crop_health / 100.0))
+        produced = self.food.generate(generated)
+        if produced > 0.0:
+            self.oxygen.generate(produced * self.photosynthesis_oxygen_ratio)
+            self.crop_cycles_completed += 1
+            self.crop_stage = "Seedling"
+            self.crop_stage_hours = 0
 
         self.total_food_produced += produced
 
@@ -336,6 +354,10 @@ class Greenhouse(BaseBuilding):
                     self.crop_health,
                     2,
                 ),
+                "crop_stage": self.crop_stage,
+                "crop_stage_hours": self.crop_stage_hours,
+                "crop_cycles_completed": self.crop_cycles_completed,
+                "photosynthesis_oxygen_ratio": self.photosynthesis_oxygen_ratio,
                 "growth_bonus": round(
                     self.growth_bonus,
                     2,

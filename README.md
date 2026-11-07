@@ -1,5 +1,9 @@
 # 🚀 HABRYN
-### 🪐 A Living Mars Colony Simulation
+### 🪐 A Living, Evolving Mars Colony Simulation
+
+<p align="center">
+  <strong>Build. Explore. Survive. Become a civilization.</strong>
+</p>
 
 **Habryn** is a Python-based Mars colony simulation built around a tick-driven simulation engine, a modular set of colony systems, one authoritative `MarsMap`, and a retro pixel-art interface powered by **Pygame CE**.
 
@@ -9,7 +13,7 @@ Build a settlement, manage its resources, watch astronauts and robots go about t
 
 ---
 
-## ✨ Highlights
+## ✨ Core Features
 
 - 🧑‍🚀 **A populated colony** — begin with a configurable crew of astronauts and robots, plus an initial settlement and facilities.
 - 🤖 **Agents and automation** — characters and robots move through the world and participate in supported tasks and activities.
@@ -25,7 +29,7 @@ Build a settlement, manage its resources, watch astronauts and robots go about t
 
 ---
 
-## 🧰 Requirements
+## 🧰 System Requirements
 
 - 🐍 **Python 3.12 or newer**
 - 📦 Dependencies listed in `requirements.txt`
@@ -35,7 +39,7 @@ The simulation engine and terminal entry point do not need to initialize Pygame.
 
 ---
 
-## ⚡ Installation
+## ⚡ Installation & Setup
 
 Open a terminal in the Habryn project directory and install the dependencies:
 
@@ -59,14 +63,17 @@ Terminal Mission Control advances the simulation when you press **Enter**. Enter
 
 ---
 
-## Screenshots
+## 📸 Screenshots
 
-## Screenshots
-
-### Habryn's PyGame Interface
+### 🎮 Habryn's PyGame Interface
 ![Habryn's PyGame Interface](screenshots/habryn-pygame-interface.png)
 
-## 🎮 Graphical controls
+### 🪐 Habryn — Matured Mars Interface
+![Habryn Matured Mars Interface](screenshots/habryn-pygame-interface-matured.png)
+
+> Add the matured interface image at `screenshots/habryn-mars-interface-matured.png` before publishing. This README references the requested filename; it does not fabricate a screenshot.
+
+## 🎮 Controls & Navigation
 
 | Input | Action |
 |---|---|
@@ -80,14 +87,33 @@ Terminal Mission Control advances the simulation when you press **Enter**. Enter
 | `G` | #️⃣ Toggle the map grid |
 | `E` | 🧭 Toggle exploration shading |
 | `M` | 🗺️ Toggle the minimap |
+| `F1` | 🎨 Cycle rendering quality: Performance, Balanced, High, Ultra |
+| `F11` | 🖥️ Toggle fullscreen |
 
-The graphical interface also provides colony telemetry and the available scenario, construction, research, and selection interfaces.
+The graphical interface also provides colony telemetry and the available scenario, construction, research, and selection interfaces. Scenario, crew, and research views are checked under small, standard, and high-resolution dummy-driver windows. The selected-object summary stays pinned at the top of the sidebar as the colony information below it scrolls. Long warnings, AI explanations, event descriptions, conversations, and research queue entries wrap within their available panel areas; this is not a universal text-layout system for every tooltip.
+
+### Display and rendering quality
+
+The renderer draws the world directly to the native Pygame display surface. The four quality presets control terrain texture resolution/detail, character and rover sprite detail, and environmental particles; sprites and terrain are generated at their selected source resolution rather than enlarged from the former 16-pixel terrain atlas. Terrain is cached in reusable chunks, the minimap is cached between simulation ticks, repeated UI text surfaces are cached, and visible agents and buildings are culled before sprite work. A paused, unchanged scene skips redundant snapshot and screen redraw work. On Windows the UI scale follows the monitor DPI reported for the window; other platforms use a window-size fallback. UI scale can be set independently on every platform.
+
+Choose a monitor-native window, standard resolution, quality level, and explicit UI scale in code:
+
+```python
+from colony.visualization.app import HabrynApp
+
+HabrynApp(size="native", quality="Ultra", fullscreen=True).run()
+HabrynApp(size="1440p", quality="High", ui_scale=1.25).run()
+```
+
+Supported named sizes are `720p`, `1080p`, `1440p`, `4k`, and `native`. Pass a `(width, height)` tuple for a custom resizable window. `F1` cycles quality and `F11` toggles fullscreen; when exclusive fullscreen is rejected by the display driver, Habryn falls back to a borderless monitor-sized window. The Pygame presentation layer remains read-only with respect to authoritative simulation state.
 
 ---
 
-## 🪐 Starting and configuring a colony
+## 🪐 Starting Your Colony
 
 Habryn uses `ColonyConfig` to define starting conditions. The configuration supports map dimensions, a random seed, starting inventories, and the initial astronaut and robot counts. The default setup creates a small settlement with **six astronauts and three robots**, along with facilities, shared inventories, seeded terrain, and resource deposits.
+
+The graphical scenario picker preserves six independent presets: **First Landing**, **Research Outpost**, **Industrial Base**, **Survival**, **Sandbox**, and **Established Settlement**. They retain distinct crew sizes, supplies, facility mixes, difficulty settings, events, and arrival schedules. The test suite constructs and checks every preset and verifies that all six remain selectable in the interface.
 
 Example:
 
@@ -117,7 +143,7 @@ The graphical interface includes scenario selection. Exact starting conditions d
 
 ---
 
-## 🏭 Colony operations
+## 🏭 Colony Operations & Simulation Systems
 
 Habryn connects its facilities and managers to shared simulation state. During simulated time, supported systems handle production and consumption, crew life support, power storage dispatch, resource-shortage tracking, and environmental effects.
 
@@ -134,11 +160,17 @@ The colony includes systems for:
 - 🚨 **Events and emergencies:** operational events and warnings surfaced through colony telemetry.
 - 🧑‍🤝‍🧑 **Social activity:** interactions between agents as part of the simulation.
 
-The exact actions available to an agent depend on the existing task and manager systems. Habryn does not claim a separate general-purpose autonomous job-planning system for every possible activity.
+### Autonomous planning and work
+
+The AI manager samples authoritative inventories on the hourly simulation cadence, compares them with the previous sample, and records net-rate forecasts and hours-to-empty for colony reserves. It creates explainable reserve goals for food, water, oxygen, power, and fuel. When the measured depletion forecast is four hours or less, autonomy is enabled, power and construction materials are available, and a valid site exists, it can queue one bounded capacity expansion through the existing construction manager. Producer expansion is capped at two facilities of a given type; blocked plans retain the reason they could not proceed.
+
+The same planner converts existing maintenance requests into engineer tasks and low greenhouse crop-health readings into farmer irrigation tasks. Workers use the normal task assignment and map movement code to reach the facility. Irrigation consumes two units from the shared water inventory, and maintenance raises the building's maintenance condition and repairs integrity. The sidebar exposes current goals and the nearest forecast. These behaviors are connected to the existing managers; they do not represent a universal planner for every activity in the simulation.
+
+Seeded terrain is now generated in coherent regional belts with terrain-linked finite water and mineral deposits; the settlement itself is placed in a stable, explored plain. Mines and water plants read and deplete those finite `MarsMap` deposits, and an exhausted deposit cannot keep producing. Oxygen electrolysis consumes shared water and power before adding oxygen to storage. Path routing uses terrain-weighted A* with parent links rather than copying a full path at every search node. Initial crew placement expands around the settlement and can use other free walkable map tiles when needed.
 
 ---
 
-## 🎨 Visual style
+## 🎨 Visual Identity & Presentation
 
 The graphical world uses a retro, 16-bit-inspired pixel-art direction with a higher-detail character treatment.
 
@@ -153,7 +185,7 @@ Visual generation is deterministic where tied to world or character identity. Re
 
 ---
 
-## 💾 Saving and loading
+## 💾 Save Systems & Persistence
 
 Habryn stores authoritative simulation state as JSON. The current save format uses **schema version 2**.
 
@@ -184,7 +216,15 @@ restored = Simulation.deserialize(data)
 
 ---
 
-## 🧪 Tests and code checks
+## 🧭 Project Status
+
+Habryn is an actively evolving Mars-colony simulation. The documented implementation includes six selectable scenarios, autonomous task workflows, finite resource deposits, rover operations, crop growth, research progression, building-specific visual identities, and persistent simulation state.
+
+The limitations below are intentional scope boundaries, not claims that those systems are already complete. Keep this section synchronized with tested repository behavior as development continues.
+
+---
+
+## 🧪 Testing & Quality Checks
 
 Run the test suite:
 
@@ -214,7 +254,7 @@ The project has been verified with automated tests and headless Pygame startup, 
 
 ---
 
-## 🗂️ Project structure
+## 🗂️ Project Architecture
 
 ```text
 Habryn/
@@ -234,9 +274,15 @@ Habryn/
 
 The tree above highlights key entry points and modules; additional managers, entities, environment, resource, task, and event modules live under `colony/`.
 
+### Design documents
+
+- [Architecture overview](docs/architecture.md) — runtime, ownership boundaries, and persistence flow.
+- [Research system](docs/research.md) — the six implemented technologies, prerequisites, and effects.
+- [Development roadmap](docs/roadmap.md) — delivered foundations and clearly labeled future directions.
+
 ---
 
-## 🧭 Design principles
+## 🧭 Engineering Principles
 
 Habryn follows a few important architectural rules:
 
@@ -249,23 +295,29 @@ Habryn follows a few important architectural rules:
 
 ---
 
-## 🛠️ Current scope and limitations
+## 🛠️ Current Scope & Known Limitations
 
-Habryn is an actively developed simulation. Some systems are intentionally bounded rather than pretending to model every aspect of a real Mars settlement.
+Habryn is an operational simulation with bounded autonomous workflows. The systems below describe the implemented scope; they do not claim to simulate every part of a real Mars settlement.
 
-- 🔬 Research currently offers a finite set of upgrades.
-- 🏠 Dedicated inspectable building-interior views are not currently implemented.
-- 🧑‍🔧 Work assignment uses the existing task-manager APIs and supported task actions; it is not a universal autonomous planning system.
-- 🎨 Character and building artwork is generated and cached in code rather than supplied as a large external art pack.
+- 🔬 Research now has six persisted technology nodes across Energy, Agriculture, Life Support, Engineering, and Medicine. Solar Efficiency, Oxygen Recovery, and Robotics are root technologies; Crop Yield, Water Recovery, and Medical Care require their respective prerequisites. Research consumes Science Points over scientist work at an operational laboratory, and each completed upgrade changes authoritative simulation parameters. This remains a small tree rather than a broad technology catalog.
+- 🧑‍🔧 AI assigns supported tasks through the existing task manager, including fuel extraction and delivery, exploration surveys, crop irrigation, maintenance, and rover recovery. It is not a universal workforce planner, and facility staffing and manufacturing chains remain limited.
+- 🌱 Greenhouses advance crops through seedling, vegetative, flowering, and mature stages. Mature crops produce food and linked oxygen when water, power, heat, and crop health allow. Crop varieties, seed inventory, dedicated oxygen collection, and gas processing are not modeled.
+- 🫧 Oxygen generation and greenhouse output feed the shared oxygen inventory. Separate purification, compression, finite cylinders, and physical oxygen distribution are not implemented.
+- 🚚 The validated physical transport workflow covers finite fuel deposits: a robot reserves and extracts fuel, carries it across the map, unloads it into the shared colony inventory, and the reactor consumes that same inventory. Logistics requests persist across saves. Other resources do not yet use a complete physical collection and delivery chain.
+- 🤖 Rovers have role assignments, battery use, cargo movement cost, and an engineer recovery workflow. Remote outposts, broad role-specific career behavior, and long-range expedition planning remain future work.
+- 👨‍👩‍👧 Demographic growth through relationships, family formation, gestation, and children is not implemented.
+- 🏠 Selected-object panels expose facility operations, condition, resource and storage fields, and agent state, but dedicated facility interior scenes, crop-plot inspections, and complete equipment inventories are not implemented. Character and building artwork is generated and cached in code rather than supplied as a large external art pack.
+- 🎨 Building classes use a centralized palette and silhouette catalog, with distinct pixel-art treatment for current facility types and compact state marks for construction, maintenance, abandonment, shortages, power, and damage.
+- 🏭 Several facilities use simplified production rules. Complete water purification and recycling, oxygen gas handling, and multi-stage industrial manufacturing are not yet modeled.
 
 These boundaries are documented so the README describes the implemented project rather than promising features that do not exist yet.
 
 ---
 
-## 🌟 The mission
+## 🌟 The Mission
 
 Habryn is an evolving experiment in simulation engineering, autonomous colony systems, and game development.
 
 From the first habitat to a growing settlement, every Sol is another opportunity to make the colony more capable, resilient, and alive.
 
-**🪐 Welcome to Mars.
+## **🪐 Welcome to Mars.
