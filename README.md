@@ -320,4 +320,4 @@ Habryn is an evolving experiment in simulation engineering, autonomous colony sy
 
 From the first habitat to a growing settlement, every Sol is another opportunity to make the colony more capable, resilient, and alive.
 
-## **🪐 Welcome to Mars.
+**🪐 Welcome to Mars.**
